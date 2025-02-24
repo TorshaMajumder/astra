@@ -1,0 +1,68 @@
+#project-specific
+.DS_store
+.project
+.pydevproject
+.vscode
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+
+# IPython Notebook
+.ipynb_checkpoints
+
+####
+# linux
+*~
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+
+# server auth directory
+/server/
+
+
+############
+# latex
+*.log
+*.aux
+*.out
+*tex.gz
+
+# virtualenv
+venv/
+ENV/
+
+
+
+
+
