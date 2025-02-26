@@ -327,7 +327,7 @@ def create_dataset(df,
                                   bands=bands, min_detec=min_detec, n_partition=n_partition)
 
         except Exception:
-            print(f"\n\n[Traceback]\n",traceback.format_exc())
+            print(f"\n\n[Traceback]\n {traceback.format_exc()}\n")
             
    
 
@@ -352,7 +352,6 @@ def main(path_to_buff, path_to_store, bands):
                                                             max_lcs_per_chunk=100)
 
     with Client() as client:
-        display(client)
         catalog_compute.compute(scheduler='processes')
 
     end = time.time()
