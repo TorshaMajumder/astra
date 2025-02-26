@@ -157,6 +157,7 @@ def process_lc(id_, row, bands, min_detec):
             #
             # Sort the lightcurve by band in the following order: g, r, i
             #
+            temp_df.replace([np.inf, -np.inf], np.nan, inplace=True)
             temp_df = temp_df.dropna()
             temp_df['band_sorted'] = pd.Categorical( temp_df['band'], 
                                             categories=list(bands.keys()), 
@@ -231,6 +232,7 @@ def create_dataset(df,
                     njobs=1,
                     bands=None,
                     seed=42,
+                    label=None,
                     min_detec=100,
                     train_size=0.80,
                     max_lcs_per_chunk=100,
@@ -283,6 +285,19 @@ def create_dataset(df,
             df = df.assign(**{LC_COLUMN: df[LC_COLUMN].astype(NestedDtype.from_pandas_arrow_dtype(df.dtypes[LC_COLUMN]))},)
             df = df.dropna(subset=['lc'])
             #
+            #
+            #
+            if ("Class" not in df.columns) and (label):
+                #
+                #
+                #
+                df['Class'] = label
+            else:
+                raise AttributeError(f"\nException Raised: You must provide a class/label to this catalog."
+                      f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
+                      f"\nparameter is {label}. Please provide a 'Class' column to the catalog or define" 
+                      f"\nthe 'label' parameter.")
+            #
             # Save the number of classes and their counts in a .CSV file
             #
             unique, counts = np.unique(df['Class'], return_counts=True)
@@ -327,6 +342,7 @@ def main(path_to_buff, path_to_store, bands):
     catalog_compute = read_catalog._ddf.map_partitions(create_dataset, 
                                                             target=path_to_store,
                                                             bands=ztf_band,
+                                                            label=None,
                                                             seed=42,
                                                             min_detec=100,
                                                             train_size=.80,
@@ -344,7 +360,7 @@ def main(path_to_buff, path_to_store, bands):
 
 if __name__ == '__main__':
     
-    path_to_buff = '../data/cephids/'
-    path_to_store="../data/cephids/"
+    path_to_buff = '../dataset/cephids/'
+    path_to_store="../dataset/cephids/"
     
     main(path_to_buff, path_to_store, bands=ztf_band)
