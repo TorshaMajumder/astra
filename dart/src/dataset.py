@@ -16,7 +16,6 @@ from dask.distributed import Client
 from joblib import Parallel, delayed
 from nested_pandas import NestedDtype
 from joblib import wrap_non_picklable_objects
-from dart.bands.bands import ztf_band
 
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
@@ -331,38 +330,3 @@ def create_dataset(df,
             
    
 
-def main(path_to_buff, path_to_store, bands):
-    #
-    # Read catalog
-    #
-    read_catalog = read_hats(path_to_buff, )
-    #    
-    print("\nStarting!")
-    start = time.time()
-    #
-    #
-    #
-    catalog_compute = read_catalog._ddf.map_partitions(create_dataset, 
-                                                            target=path_to_store,
-                                                            bands=ztf_band,
-                                                            label=None,
-                                                            seed=42,
-                                                            min_detec=100,
-                                                            train_size=.80,
-                                                            max_lcs_per_chunk=100)
-
-    with Client() as client:
-        catalog_compute.compute(scheduler='processes')
-
-    end = time.time()
-    print("\nTime (mins):", ((end-start)//60))
-    print("\nDone!")
-
-    
-
-if __name__ == '__main__':
-    
-    path_to_buff = '../dataset/cephids/'
-    path_to_store="../dataset/cephids/"
-    
-    main(path_to_buff, path_to_store, bands=ztf_band)
