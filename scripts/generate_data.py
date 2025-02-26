@@ -22,11 +22,11 @@ def main():
     parser = argparse.ArgumentParser(prog='dart-data',
                                     description="Generate data as tensorflow records")
     
-    parser.add_argument('--target', default="./dataset/", type=str,
+    parser.add_argument('--target', default="../dataset/cepheids/", type=str,
                     help='Directory path for the files to be stored.')
-    parser.add_argument('--path_to_buff', default="./dataset/", type=str,
+    parser.add_argument('--path_to_buff', default="../dataset/cepheids/hats/zubercal_vcep", type=str,
                     help='Directory path for the files to be read.')
-    parser.add_argument('--label', default="None", type=str,
+    parser.add_argument('--label', default="", type=str,
                     help="Label associated with the catalog. Provide this value only if the Class column is missing in the dataframe.")
     parser.add_argument('--seed', default=42, type=int,
                     help='Set seed value.') 
@@ -37,7 +37,8 @@ def main():
     parser.add_argument('--train_size', default=0.8, type=float,
                     help='Training fraction.')     
 
-    args = parser.parse_args() 
+   
+    args = parser.parse_args()
     #
     # Read catalog
     #
@@ -60,13 +61,7 @@ def main():
     
 
 if __name__ == '__main__':
-    #    
-    print("\nStarting!")
-    start = time.time()
-    
-    
-    main()
+       
+    prog = main()
+    sys.exit(prog)
 
-    end = time.time()
-    print("\nTime (mins):", ((end-start)//60))
-    print("\nDone!")

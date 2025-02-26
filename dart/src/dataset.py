@@ -289,16 +289,17 @@ def create_dataset(df,
             #
             #
             #
-            if ("Class" not in df.columns) and (label):
-                #
-                #
-                #
-                df['Class'] = label
-            else:
-                raise AttributeError(f"\nException Raised: You must provide a class/label to this catalog."
-                      f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
-                      f"\nparameter is {label}. Please provide a 'Class' column to the catalog or define" 
-                      f"\nthe 'label' parameter.")
+            if "Class" not in df.columns:
+                if label: 
+                    #
+                    #
+                    #
+                    df['Class'] = label
+                else:
+                    raise AttributeError(f"\nException Raised: You must provide a class/label to this catalog."
+                        f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
+                        f"\nparameter is {label} . Please provide a 'Class' column to the catalog or define" 
+                        f"\nthe 'label' parameter.")
             #
             # Save the number of classes and their counts in a .CSV file
             #
