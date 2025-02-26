@@ -249,6 +249,9 @@ def create_dataset(df,
                         e.g. ZTF band order is {g, r, i}, meaning g-filter 
                         has the highest priority and i-filter has the lowest.
         n_jobs (int): # of parallel jobs
+        label (str): label associated with the catalog.
+                        Provide this value only if the 'Class' column 
+                        is missing in the dataframe (df). 
         train_size (float): train fraction
         min_detec (int): minimum detections in each light curve
                         Note: For ZTF, "min_detec" for g & r-filters is user-defined
