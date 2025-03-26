@@ -13,7 +13,171 @@ os.system('clear')
 tf.random.set_seed(1024)
 np.random.seed(1024)
 
-# @tf.function
+
+def photometric_outlier(tt, mask, mag_limit, mag_saturation):
+  """
+  Introduces photometric outliers to a TensorFlow tensor.
+
+  Args:
+      tt: The input TensorFlow tensor.
+      mag_limit: The upper limit for magnitude.
+      mag_saturation: The lower limit for magnitude.
+
+  Returns:
+      The modified TensorFlow tensor with added outliers.
+  """
+  # Get the indices where the mask is 1
+  valid_indices = tf.where(mask)
+
+  # Initialize random_index outside the conditional to ensure it's defined in both branches
+  random_index = tf.constant(-1, dtype=tf.int64)
+
+  # If there are no valid indices, return -1
+  num_valid_indices = tf.shape(valid_indices)[0]
+  if num_valid_indices != 0:
+
+
+
+
+
+
+    # Generate a random index within the bounds of the array
+    # random_index = tf.random.uniform([], minval=0, maxval=num_valid_indices, dtype=tf.int32)
+    # random_index = tf.random.choice(valid_indices, size=1)
+    # random_index = tf.squeeze(random_index)
+    random_index = tf.random.shuffle(valid_indices)[0] # Use tf.random.shuffle for TensorFlow 1.x
+    random_index = tf.squeeze(random_index)
+
+
+
+    # Get the value at the random index
+    mag = tf.gather(tt, random_index)
+
+    # Apply photometric outlier logic
+
+    mag =  mag_saturation - tf.random.uniform([], 0, 0.5, dtype=tf.float32),  ## further lower the value of mag
+
+
+    # Update the tensor using tf.tensor_scatter_nd_update
+    # Cast 'mag' to the same data type as 'tt' before the update
+    mag = tf.cast(mag, tt.dtype)  # Ensure data types match
+
+    # Update the tensor using tf.tensor_scatter_nd_update
+    indices = tf.reshape(random_index, [1])
+    updates = tf.reshape(mag, [1])
+    tt = tf.tensor_scatter_nd_update(tt, tf.expand_dims(indices, axis=-1), updates)
+
+  return tt, random_index
+
+def bin_lc3(sequence, bin_width, drop_data):
+
+  time = sequence[:,0]
+
+  min_time = tf.reduce_min(time)
+  max_time = tf.reduce_max(time)
+
+  bins = tf.range(min_time, max_time + bin_width, bin_width, dtype=time.dtype)
+
+  bin_index = tf.searchsorted(bins, time, side="left") #left for lower-bound
+
+  uniq_bin_index, time_index = tf.unique(bin_index)
+
+
+  num_bins_to_drop = tf.cast(tf.cast(tf.shape(uniq_bin_index)[0], tf.float32) * drop_data, tf.int32)
+
+  num_bins_to_drop = tf.maximum(num_bins_to_drop, 1) # Handle case where num_bins_to_drop is 0
+
+
+  bin_index_drop = tf.random.shuffle(uniq_bin_index)[:num_bins_to_drop]
+
+  time_index_drop = tf.math.reduce_any(tf.equal(time_index[:, tf.newaxis], bin_index_drop), axis=1)
+
+  mask_serie = tf.where(time_index_drop, tf.zeros_like(time_index_drop, dtype=sequence.dtype), tf.ones_like(time_index_drop, dtype=sequence.dtype))
+
+  new_serie = tf.where(tf.expand_dims(time_index_drop, axis=-1), tf.zeros_like(sequence), sequence)
+
+
+  return new_serie, mask_serie
+
+
+def process_serie(current_serie, mask_serie, max_len, num_cols):
+    assert current_serie.shape[0] == mask_serie.shape[0]
+
+    serie_len = tf.shape(current_serie)[0]
+    pivot = 0
+
+    # Check if the serie is larger than the maximum allowed
+    if serie_len > max_len:
+        max_val = tf.maximum(serie_len - max_len, 0)
+
+        pivot = tf.random.uniform([],
+                                    minval=tf.cast(0, tf.int64),
+                                    maxval=tf.cast(max_val, tf.int64),
+                                    dtype=tf.int64)
+        current_serie = tf.slice(current_serie, [pivot, 0], [max_len, -1])
+        mask_serie = tf.slice(mask_serie, [pivot], [max_len])
+    else:
+        padding_rows = max_len - serie_len
+        if padding_rows > 0:
+            zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
+            current_serie = tf.concat([current_serie, zero_padding], axis=0)
+            mask_serie = tf.concat([mask_serie, tf.zeros([padding_rows], dtype=mask_serie.dtype)], axis=0)
+
+    return current_serie, mask_serie
+
+# def fill_with_zeros(max_len, num_cols, sequence_dtype):
+#     return tf.zeros((max_len, num_cols), dtype=sequence_dtype)
+
+def get_window(sequence, mask, last_index, bands_tensor, max_len):
+    """
+    Extracts sliding windows from sequences in the input dictionary,
+    padding sequences shorter than max_len with zeros.
+
+    Args:
+      input_dict: A dictionary containing 'input' (a tensor of shape [num_steps, num_features])
+                  and 'last_index' (a tensor of the indices of the end of each series).
+      max_len: The maximum length of each sequence.
+
+    Returns:
+      An updated input_dict with 'new_input' containing the processed sequences.
+    """
+
+    ztf_band = {'g':23.4, 'r': 234.5, 'i': 345.7} # Global variable
+    num_cols = tf.shape(sequence)[1]
+
+    # Pre-compute band indices
+    # bands_tensor = tf.constant(bands)
+    # band_indices = {band: tf.where(tf.equal(bands_tensor, band))[0][0] if tf.reduce_any(tf.equal(bands_tensor, band)) else -1 for band in ztf_band.keys()}
+    band_indices = {band: tf.cond(
+        tf.reduce_any(tf.equal(bands_tensor, band)),
+        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int64), # Cast to tf.int64 if condition is True
+        lambda: tf.constant(-1, dtype=tf.int64) # Otherwise, return -1 as tf.int64
+    ) for band in ztf_band.keys()}
+
+
+    series = []
+    mask_series = []
+    idx = tf.cast(0, dtype=tf.int64)
+
+    for fil in ztf_band.keys():
+      index_in_bands = band_indices[fil]
+      is_in_bands = index_in_bands != -1
+
+      if is_in_bands:
+          current_serie = sequence[idx:last_index[index_in_bands] + 1]
+          mask_serie = mask[idx:last_index[index_in_bands] + 1]
+          current_serie, mask_serie = process_serie(current_serie, mask_serie, max_len, num_cols)
+          idx = last_index[index_in_bands] + 1
+      else:
+          current_serie = tf.zeros((max_len, num_cols), dtype=sequence.dtype)
+          mask_serie = tf.zeros(max_len, dtype=mask.dtype)
+
+      series.append(current_serie)
+      mask_series.append(mask_serie)
+
+    result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
+    return result_series, result_mask
+
 def gaussian_noise(sequence, noise_level=0.1):
     """
     Adds white Gaussian noise to a sequence.
@@ -38,104 +202,53 @@ def gaussian_noise(sequence, noise_level=0.1):
 
     # Add the noise to the sequence
     noisy_sequence = sequence + noise
-    # print("noisy", noisy_sequence)  
+    # print("noisy", noisy_sequence)
 
     return noisy_sequence
 
 
-# @tf.function
-def bin_lc(sequence, bin_width, drop_data):
-
-  time = sequence[:,0]
-  # time = tf.where(tf.math.is_inf(time), tf.where(time < 0, tf.constant(-1e10, dtype=time.dtype), tf.constant(1e10, dtype=time.dtype)), time)
-  # time = tf.where(tf.math.is_nan(time), tf.constant(0.0, dtype=time.dtype), time)
-  
-  # mag = sequence[:,1]
-  # magerr = sequence[:,2]
-  # band_sorted = sequence[:,3]
-
-  min_time = tf.reduce_min(time)
-  max_time = tf.reduce_max(time)
-  bins = tf.range(min_time, max_time + bin_width, bin_width, dtype=time.dtype) # Create the bins with tf functions.
-
-  #Use tf.searchsorted instead of tf.raw_ops.Bucketize
-  inds = tf.searchsorted(bins, time)
-
-  drop_inds = tf.random.shuffle(tf.range(tf.shape(inds)[0]))[:tf.cast(tf.cast(tf.shape(inds)[0], tf.float32) * drop_data, tf.int32)] # Create indices of which rows will be dropped using tf functions.
 
 
-  mask = tf.ones(tf.shape(sequence)[0], dtype=tf.bool) # Create a mask that will drop rows.
-  updates = tf.zeros_like(drop_inds, dtype=tf.bool)
-  mask = tf.tensor_scatter_nd_update(mask, tf.expand_dims(drop_inds, axis=1), updates) # Drop data based on calculated mask.
-  filtered_seq = tf.boolean_mask(sequence, mask)
-
-  return filtered_seq
-
-
-# @tf.function
-def get_window(sequence, last_index, max_len, binning, bin_width, drop_data):
+def standardize(x, err):
     """
-    Extracts sliding windows from sequences in the input dictionary,
-    padding sequences shorter than max_len with zeros.
+    Standardizes the input tensor 'x' using a weighted average based on the 'err' tensor.
 
     Args:
-      input_dict: A dictionary containing 'input' (a tensor of shape [num_steps, num_features])
-                  and 'last_index' (a tensor of the indices of the end of each series).
-      max_len: The maximum length of each sequence.
+        x: A TensorFlow tensor representing the data.
+        err: A TensorFlow tensor representing the corresponding errors (uncertainties).
 
     Returns:
-      An updated input_dict with 'new_input' containing the processed sequences.
+        A TensorFlow tensor 'x_' containing the standardized data.
     """
 
-    concatenated_sequences_ta = tf.TensorArray(dtype=sequence.dtype, size=0, dynamic_size=True)
-    idx = tf.constant(0, dtype=tf.int64)
-    ta_idx = tf.constant(0, dtype=tf.int32)
+    # Replace NaN values in 'x' with zeros
+    x = tf.where(tf.math.is_nan(x), tf.zeros_like(x), x)
 
-    # Iterate through the last_index to get the start and end of each series.
-    for li in last_index:
-
-      current_serie = sequence[idx:li+1]
-      
-      if binning:
-        current_serie = bin_lc(current_serie, bin_width, drop_data)
-      
-      serie_len = tf.shape(current_serie)[0]
-      # serie_len = tf.cast(li+1-idx, tf.int64)
-      pivot = 0
-
-      # Check if the serie is larger than the maximum allowed
-      if serie_len > max_len:
-
-        max_val = tf.maximum(serie_len - max_len, 0)
-        pivot = tf.random.uniform([],
-                                    minval=tf.cast(0,tf.int64),
-                                    maxval=tf.cast(max_val,tf.int64),
-                                    dtype=tf.int64)
+    # Replace NaN values in 'err' with ones (equivalent to no weight)
+    err = tf.where(tf.math.is_nan(err), tf.ones_like(err), err)
 
 
-        current_serie = tf.slice(current_serie, [pivot,0], [max_len, -1])
+    # Ensure err is not zero to avoid division by zero
+    err = tf.where(tf.equal(err, 0), tf.ones_like(err), err) # replace every zero in err with 1 so that no nan are produced.
 
-      else:
+    # Calculate the weights (inverse of squared errors)
+    weights = 1.0 / tf.square(err)
 
-        padding_rows = max_len - serie_len
+    # Calculate the weighted mean
+    weighted_sum = tf.reduce_sum(x * weights)
+    sum_of_weights = tf.reduce_sum(weights)
 
-        if padding_rows > 0:
+    mean = weighted_sum / sum_of_weights
 
-            num_cols = tf.shape(current_serie)[1]
-            zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
-            current_serie = tf.concat([current_serie, zero_padding], axis=0)
+    # Center the data by subtracting the weighted mean
+    x_ = x - mean
 
-
-      idx = li + 1
-      concatenated_sequences_ta = concatenated_sequences_ta.write(ta_idx, current_serie)
-      ta_idx = ta_idx + 1
-
-    result = concatenated_sequences_ta.concat()
-
-    return result
+    return x_ , mean
 
 
-# @tf.function
+
+
+
 def deserialize(sample):
     '''
     "mjd", "mag", "magerr", "band_sorted"
@@ -176,52 +289,73 @@ def deserialize(sample):
 
 
     sequence = tf.stack(casted_inp_parameters, axis=2)[0]
-    input_dict['input'] = sequence
+    input_dict['input_id'] = sequence
 
     return input_dict
 
 
-# @tf.function
 def augmentation(data,
                  maxlen,
                  sliding_window,
                  window_size,
                  binning,
                  bin_width,
-                 drop_data,
-                 white_noise):
+                 keep_data,
+                 add_noise,
+                 add_outlier):
 
   if data is not None:
     input_dict = deserialize(data)
-    mag = input_dict['input'][:,1]
-    magerr = input_dict['input'][:,2]
-    mjd = input_dict['input'][:,0]
-    #check for infinite values in mjd column
-    # mjd = tf.where(tf.math.is_nan(mjd), tf.zeros_like(mjd), mjd)
-    # mjd = tf.where(tf.math.is_inf(mjd), tf.zeros_like(mjd), mjd)
-    standardized_mag, mean = standardize(mag, magerr)
-    if white_noise:
-      standardized_mag = gaussian_noise(standardized_mag)
-    # Create a new tensor by concatenating:
-    # 1. the first column of original tensor (time or mjd)
-    # 2. the newly calculated standardized_mag
-    # 3. the remaining columns of the original tensor (magerr and band_sorted)
+    mag = input_dict['input_id'][:,1]
+    magerr = input_dict['input_id'][:,2]
+    mjd = input_dict['input_id'][:,0]
+    # #check for infinite values in mjd column
+    # # mjd = tf.where(tf.math.is_nan(mjd), tf.zeros_like(mjd), mjd)
+    # # mjd = tf.where(tf.math.is_inf(mjd), tf.zeros_like(mjd), mjd)
+    new_mag, mean = standardize(mag, magerr)
+    # if white_noise:
+    #   standardized_mag = gaussian_noise(standardized_mag)
+    # # Create a new tensor by concatenating:
+    # # 1. the first column of original tensor (time or mjd)
+    # # 2. the newly calculated standardized_mag
+    # # 3. the remaining columns of the original tensor (magerr and band_sorted)
+
+    if add_noise:
+      new_mag = gaussian_noise(new_mag)
+
     new_input = tf.concat([
-                            input_dict['input'][:, 0:1], #mjd
-                            tf.reshape(standardized_mag, (-1,1)),#the new standardized magnitude
-                            input_dict['input'][:, 2:]#magerr and band_sorted
+                            input_dict['input_id'][:, 0:1], #mjd
+                            tf.reshape(new_mag, (-1,1)),#the new standardized magnitude
+                            input_dict['input_id'][:, 2:]#magerr and band_sorted
                         ], axis=1)
 
-    # input_dict['input'] = new_input #replaces original with the updated version.
+    # # input_dict['input'] = new_input #replaces original with the updated version.
 
 
-    # if binning:
-    #   new_input = bin_lc(new_input, bin_width, drop_data)
+    if binning:
+      new_input, mask = bin_lc3(new_input, bin_width, keep_data)
 
-    input = get_window(new_input, input_dict['last_index'], maxlen, binning, bin_width, drop_data)
+    new_input, mask = get_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
+
+    if add_outlier:
+      mag_limit = 21
+      mag_saturation = 13.5
+      new_mag, idx = photometric_outlier(new_input[:, 1], mask, mag_limit, mag_saturation)
+
+    new_input = tf.concat([
+                            new_input[:, 0:1], #mjd
+                            tf.reshape(new_mag, (-1,1)),#the new standardized magnitude
+                            new_input[:, 2:]#magerr and band_sorted
+                        ], axis=1)
 
 
-    return input
+    return new_input, input_dict['id'], mask, new_mag, idx
+
+
+
+
+
+
 
 
 
@@ -233,8 +367,9 @@ def prefetch_batches(source,
                     window_size=0.5,
                     binning = True,
                     bin_width = 5,
-                    drop_data = 0.5,
-                    white_noise = True):
+                    drop_data = 0.6,
+                    add_noise = True,
+                    add_outlier = True):
 
   labels = list()
   chunks = list()
@@ -258,17 +393,21 @@ def prefetch_batches(source,
     #
     #
     #
-    dataset = dataset.shuffle(1024).map(lambda data: augmentation(data,
+    dataset = dataset.shuffle(seed).map(lambda data: augmentation(data,
                                                       maxlen,
                                                       sliding_window,
                                                       window_size,
                                                       binning,
                                                       bin_width,
                                                       drop_data,
-                                                      white_noise))
+                                                      add_noise,
+                                                      add_outlier))
     #
     #
     #
-    # for element in dataset:
-    #   print(element)
-    #   break
+    for element in dataset:
+      print(element)
+      break
+
+
+
