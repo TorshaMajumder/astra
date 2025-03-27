@@ -5,7 +5,9 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
+from dart.bands.bands import ztf_band
 from dart.utils.helper import standardize
+
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 AUTO = tf.data.AUTOTUNE
@@ -28,41 +30,17 @@ def photometric_outlier(tt, mask, mag_limit, mag_saturation):
   """
   # Get the indices where the mask is 1
   valid_indices = tf.where(mask)
-
-  # Initialize random_index outside the conditional to ensure it's defined in both branches
   random_index = tf.constant(-1, dtype=tf.int64)
 
-  # If there are no valid indices, return -1
+  
   num_valid_indices = tf.shape(valid_indices)[0]
   if num_valid_indices != 0:
 
-
-
-
-
-
-    # Generate a random index within the bounds of the array
-    # random_index = tf.random.uniform([], minval=0, maxval=num_valid_indices, dtype=tf.int32)
-    # random_index = tf.random.choice(valid_indices, size=1)
-    # random_index = tf.squeeze(random_index)
     random_index = tf.random.shuffle(valid_indices)[0] # Use tf.random.shuffle for TensorFlow 1.x
     random_index = tf.squeeze(random_index)
-
-
-
-    # Get the value at the random index
     mag = tf.gather(tt, random_index)
-
-    # Apply photometric outlier logic
-
     mag =  mag_saturation - tf.random.uniform([], 0, 0.5, dtype=tf.float32),  ## further lower the value of mag
-
-
-    # Update the tensor using tf.tensor_scatter_nd_update
-    # Cast 'mag' to the same data type as 'tt' before the update
     mag = tf.cast(mag, tt.dtype)  # Ensure data types match
-
-    # Update the tensor using tf.tensor_scatter_nd_update
     indices = tf.reshape(random_index, [1])
     updates = tf.reshape(mag, [1])
     tt = tf.tensor_scatter_nd_update(tt, tf.expand_dims(indices, axis=-1), updates)
@@ -125,8 +103,7 @@ def process_serie(current_serie, mask_serie, max_len, num_cols):
 
     return current_serie, mask_serie
 
-# def fill_with_zeros(max_len, num_cols, sequence_dtype):
-#     return tf.zeros((max_len, num_cols), dtype=sequence_dtype)
+
 
 def get_window(sequence, mask, last_index, bands_tensor, max_len):
     """
@@ -142,12 +119,9 @@ def get_window(sequence, mask, last_index, bands_tensor, max_len):
       An updated input_dict with 'new_input' containing the processed sequences.
     """
 
-    ztf_band = {'g':23.4, 'r': 234.5, 'i': 345.7} # Global variable
+    # ztf_band = {'g':23.4, 'r': 234.5, 'i': 345.7} # Global variable
     num_cols = tf.shape(sequence)[1]
 
-    # Pre-compute band indices
-    # bands_tensor = tf.constant(bands)
-    # band_indices = {band: tf.where(tf.equal(bands_tensor, band))[0][0] if tf.reduce_any(tf.equal(bands_tensor, band)) else -1 for band in ztf_band.keys()}
     band_indices = {band: tf.cond(
         tf.reduce_any(tf.equal(bands_tensor, band)),
         lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int64), # Cast to tf.int64 if condition is True
@@ -309,16 +283,9 @@ def augmentation(data,
     mag = input_dict['input_id'][:,1]
     magerr = input_dict['input_id'][:,2]
     mjd = input_dict['input_id'][:,0]
-    # #check for infinite values in mjd column
-    # # mjd = tf.where(tf.math.is_nan(mjd), tf.zeros_like(mjd), mjd)
-    # # mjd = tf.where(tf.math.is_inf(mjd), tf.zeros_like(mjd), mjd)
+    
     new_mag, mean = standardize(mag, magerr)
-    # if white_noise:
-    #   standardized_mag = gaussian_noise(standardized_mag)
-    # # Create a new tensor by concatenating:
-    # # 1. the first column of original tensor (time or mjd)
-    # # 2. the newly calculated standardized_mag
-    # # 3. the remaining columns of the original tensor (magerr and band_sorted)
+    
 
     if add_noise:
       new_mag = gaussian_noise(new_mag)
@@ -349,7 +316,7 @@ def augmentation(data,
                         ], axis=1)
 
 
-    return new_input, input_dict['id'], mask, new_mag, idx
+    return new_input
 
 
 
@@ -360,7 +327,7 @@ def augmentation(data,
 
 
 def prefetch_batches(source,
-                     seed=42,
+                    seed=42,
                     batch_size=100,
                     maxlen=200,
                     sliding_window=True,
@@ -371,43 +338,46 @@ def prefetch_batches(source,
                     add_noise = True,
                     add_outlier = True):
 
-  labels = list()
-  chunks = list()
-  filenames = list()
-  #
-  #
-  #
-  for p in os.listdir(path_to_read):
-      for lbl in os.listdir(path_to_read+p):
-          for cnk in os.listdir(path_to_read+p+"/"+lbl):
-              filenames.append(path_to_read+p+"/"+lbl+'/'+cnk)
+    labels = list()
+    chunks = list()
+    filenames = list()
+    #
+    #
+    #
+    for p in os.listdir(source):
+        for lbl in os.listdir(source+p):
+            for cnk in os.listdir(source+p+"/"+lbl):
+                filenames.append(source+p+"/"+lbl+'/'+cnk)
 
-  for f in filenames:
-    #
-    #
-    #
-    dataset = tf.data.TFRecordDataset(f)
-    #
-    #
-    #
-    #
-    #
-    #
-    dataset = dataset.shuffle(seed).map(lambda data: augmentation(data,
-                                                      maxlen,
-                                                      sliding_window,
-                                                      window_size,
-                                                      binning,
-                                                      bin_width,
-                                                      drop_data,
-                                                      add_noise,
-                                                      add_outlier))
-    #
-    #
-    #
-    for element in dataset:
-      print(element)
-      break
+    for f in filenames:
+        #
+        #
+        #
+        dataset = tf.data.TFRecordDataset(f)
+        #
+        #
+        #
+        #
+        #
+        #
+        dataset = dataset.shuffle(seed).map(lambda data: augmentation(data,
+                                                        maxlen,
+                                                        sliding_window,
+                                                        window_size,
+                                                        binning,
+                                                        bin_width,
+                                                        drop_data,
+                                                        add_noise,
+                                                        add_outlier))
+
+        dataset = dataset.padded_batch(batch_size).cache()
+        dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+    
+        #
+        #
+        #
+    return dataset
+
 
 
 
