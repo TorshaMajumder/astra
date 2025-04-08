@@ -327,16 +327,16 @@ def augmentation(data,
 
 
 def prefetch_batches(source,
-                    seed=42,
-                    batch_size=100,
-                    maxlen=200,
-                    sliding_window=True,
-                    window_size=0.5,
-                    binning = True,
-                    bin_width = 5,
-                    drop_data = 0.6,
-                    add_noise = True,
-                    add_outlier = True):
+                        seed=42,
+                        batch_size=100,
+                        maxlen=200,
+                        sliding_window=True,
+                        window_size=0.5,
+                        binning = True,
+                        bin_width = 5,
+                        drop_data = 0.6,
+                        add_noise = True,
+                        add_outlier = True):
 
     labels = list()
     chunks = list()
@@ -361,17 +361,17 @@ def prefetch_batches(source,
         #
         #
         dataset = dataset.shuffle(seed).map(lambda data: augmentation(data,
-                                                        maxlen,
-                                                        sliding_window,
-                                                        window_size,
-                                                        binning,
-                                                        bin_width,
-                                                        drop_data,
-                                                        add_noise,
-                                                        add_outlier))
+                                                                        maxlen,
+                                                                        sliding_window,
+                                                                        window_size,
+                                                                        binning,
+                                                                        bin_width,
+                                                                        drop_data,
+                                                                        add_noise,
+                                                                        add_outlier))
 
         dataset = dataset.padded_batch(batch_size).cache()
-        dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+        dataset = dataset.prefetch(buffer_size=AUTO)
     
         #
         #
