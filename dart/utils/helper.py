@@ -3,39 +3,35 @@
 #
 import tensorflow as tf
 
-# @tf.function
+@tf.function
 def standardize(x, err):
     """
     Standardizes the input tensor 'x' using a weighted average based on the 'err' tensor.
 
-    Args:
-        x: A TensorFlow tensor representing the data.
-        err: A TensorFlow tensor representing the corresponding errors (uncertainties).
+    Parameters:
+    ------------------------------------------------------------------------------------
+        x: A TensorFlow tensor representing the magnitude of the light curves.
+        err: A TensorFlow tensor representing the corresponding mag_err (uncertainties).
 
     Returns:
-        A TensorFlow tensor 'x_' containing the standardized data.
+    ------------------------------------------------------------------------------------
+        A TensorFlow tensor 'x_new' containing the standardized data.
     """
-
-    # Replace NaN values in 'x' with zeros
+    #
+    # Check for NaNs in the mag and magerr values and replace it with zeros and ones.
+    #
     x = tf.where(tf.math.is_nan(x), tf.zeros_like(x), x)
-
-    # Replace NaN values in 'err' with ones (equivalent to no weight)
     err = tf.where(tf.math.is_nan(err), tf.ones_like(err), err)
-
-
-    # Ensure err is not zero to avoid division by zero
-    err = tf.where(tf.equal(err, 0), tf.ones_like(err), err) # replace every zero in err with 1 so that no nan are produced.
-
-    # Calculate the weights (inverse of squared errors)
-    weights = 1.0 / tf.square(err)
-
+    #
     # Calculate the weighted mean
+    #
+    weights = 1.0 / tf.square(err)
     weighted_sum = tf.reduce_sum(x * weights)
     sum_of_weights = tf.reduce_sum(weights)
-
     mean = weighted_sum / sum_of_weights
-
+    #
     # Center the data by subtracting the weighted mean
-    x_ = x - mean
+    #
+    x_new = x - mean
 
-    return x_ , mean
+    return x_new , mean

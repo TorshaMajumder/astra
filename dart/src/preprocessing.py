@@ -5,8 +5,8 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-from dart.bands.bands import ztf_band
 from dart.utils.helper import standardize
+from dart.bands.bands import ztf_band, ztf_mag
 
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
@@ -15,227 +15,267 @@ os.system('clear')
 tf.random.set_seed(1024)
 np.random.seed(1024)
 
+@tf.function
+def get_window(current_serie, mask_serie, max_len, num_cols):
+  #
+  #
+  #
+  assert current_serie.shape[0] == mask_serie.shape[0]
+  #
+  pivot = 0
+  serie_len = tf.shape(current_serie)[0]
+  #
+  # Check if the sequence is larger than "max_len"
+  # If Yes then pick a window randomly
+  # Else pad sero to the end to make its length as "max_len"
+  #
+  if serie_len > max_len:
+    max_val = tf.maximum(serie_len - max_len, 0)
+    #
+    pivot = tf.random.uniform([],
+                                 minval=tf.cast(0, tf.int32),
+                                 maxval=tf.cast(max_val, tf.int32),
+                                 dtype=tf.int32)
+    #
+    current_serie = tf.slice(current_serie, [pivot, 0], [max_len, -1])
+    mask_serie = tf.slice(mask_serie, [pivot], [max_len])
 
-def photometric_outlier(tt, mask, mag_limit, mag_saturation):
-  """
-  Introduces photometric outliers to a TensorFlow tensor.
+  else:
+    padding_rows = max_len - serie_len
 
-  Args:
-      tt: The input TensorFlow tensor.
-      mag_limit: The upper limit for magnitude.
-      mag_saturation: The lower limit for magnitude.
+    if padding_rows > 0:
+      #
+      zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
+      current_serie = tf.concat([current_serie, zero_padding], axis=0)
+      mask_serie = tf.concat([mask_serie, tf.zeros([padding_rows], dtype=mask_serie.dtype)], axis=0)
 
-  Returns:
-      The modified TensorFlow tensor with added outliers.
-  """
-  # Get the indices where the mask is 1
-  valid_indices = tf.where(mask)
-  random_index = tf.constant(-1, dtype=tf.int64)
-
-  
-  num_valid_indices = tf.shape(valid_indices)[0]
-  if num_valid_indices != 0:
-
-    random_index = tf.random.shuffle(valid_indices)[0] # Use tf.random.shuffle for TensorFlow 1.x
-    random_index = tf.squeeze(random_index)
-    mag = tf.gather(tt, random_index)
-    mag =  mag_saturation - tf.random.uniform([], 0, 0.5, dtype=tf.float32),  ## further lower the value of mag
-    mag = tf.cast(mag, tt.dtype)  # Ensure data types match
-    indices = tf.reshape(random_index, [1])
-    updates = tf.reshape(mag, [1])
-    tt = tf.tensor_scatter_nd_update(tt, tf.expand_dims(indices, axis=-1), updates)
-
-  return tt, random_index
-
-def bin_lc3(sequence, bin_width, drop_data):
-
-  time = sequence[:,0]
-
-  min_time = tf.reduce_min(time)
-  max_time = tf.reduce_max(time)
-
-  bins = tf.range(min_time, max_time + bin_width, bin_width, dtype=time.dtype)
-
-  bin_index = tf.searchsorted(bins, time, side="left") #left for lower-bound
-
-  uniq_bin_index, time_index = tf.unique(bin_index)
+  return current_serie, mask_serie
 
 
-  num_bins_to_drop = tf.cast(tf.cast(tf.shape(uniq_bin_index)[0], tf.float32) * drop_data, tf.int32)
-
-  num_bins_to_drop = tf.maximum(num_bins_to_drop, 1) # Handle case where num_bins_to_drop is 0
-
-
-  bin_index_drop = tf.random.shuffle(uniq_bin_index)[:num_bins_to_drop]
-
-  time_index_drop = tf.math.reduce_any(tf.equal(time_index[:, tf.newaxis], bin_index_drop), axis=1)
-
-  mask_serie = tf.where(time_index_drop, tf.zeros_like(time_index_drop, dtype=sequence.dtype), tf.ones_like(time_index_drop, dtype=sequence.dtype))
-
-  new_serie = tf.where(tf.expand_dims(time_index_drop, axis=-1), tf.zeros_like(sequence), sequence)
-
-
-  return new_serie, mask_serie
-
-
-def process_serie(current_serie, mask_serie, max_len, num_cols):
-    assert current_serie.shape[0] == mask_serie.shape[0]
-
-    serie_len = tf.shape(current_serie)[0]
-    pivot = 0
-
-    # Check if the serie is larger than the maximum allowed
-    if serie_len > max_len:
-        max_val = tf.maximum(serie_len - max_len, 0)
-
-        pivot = tf.random.uniform([],
-                                    minval=tf.cast(0, tf.int64),
-                                    maxval=tf.cast(max_val, tf.int64),
-                                    dtype=tf.int64)
-        current_serie = tf.slice(current_serie, [pivot, 0], [max_len, -1])
-        mask_serie = tf.slice(mask_serie, [pivot], [max_len])
-    else:
-        padding_rows = max_len - serie_len
-        if padding_rows > 0:
-            zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
-            current_serie = tf.concat([current_serie, zero_padding], axis=0)
-            mask_serie = tf.concat([mask_serie, tf.zeros([padding_rows], dtype=mask_serie.dtype)], axis=0)
-
-    return current_serie, mask_serie
-
-
-
-def get_window(sequence, mask, last_index, bands_tensor, max_len):
+@tf.function
+def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
     """
-    Extracts sliding windows from sequences in the input dictionary,
-    padding sequences shorter than max_len with zeros.
+    Extracts random windows of lightcurves from the sequence if the sequence
+    length is larger than max_len, and padding sequence shorter than max_len with zeros.
 
-    Args:
-      input_dict: A dictionary containing 'input' (a tensor of shape [num_steps, num_features])
-                  and 'last_index' (a tensor of the indices of the end of each series).
-      max_len: The maximum length of each sequence.
+    Parameters:
+    --------------------------------------------------------------------------------------------
+      sequence: A tensor of shape [num_steps, num_features])
+      mask: mask tensor
+      last_index: a tensor of the indices of the last index of each band in the sequence.
+      bands_tensor: the bands in the sequence.
+      max_len: The maximum length of each band sequence after sliding window.
 
     Returns:
-      An updated input_dict with 'new_input' containing the processed sequences.
+    --------------------------------------------------------------------------------------------
+      result_series: An updated sequence with max_len.
+      result_mask: An updated mask tensor with corresponding masks.
     """
-
-    # ztf_band = {'g':23.4, 'r': 234.5, 'i': 345.7} # Global variable
-    num_cols = tf.shape(sequence)[1]
-
-    band_indices = {band: tf.cond(
-        tf.reduce_any(tf.equal(bands_tensor, band)),
-        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int64), # Cast to tf.int64 if condition is True
-        lambda: tf.constant(-1, dtype=tf.int64) # Otherwise, return -1 as tf.int64
-    ) for band in ztf_band.keys()}
-
-
+    #
+    #
+    #
     series = []
     mask_series = []
     idx = tf.cast(0, dtype=tf.int64)
-
+    num_cols = tf.shape(sequence)[1]
+    #
+    # Find the available bands in the sequence, otherwise return -1
+    # If (g,i) - filters are available in the sequence, it will return {'g':0, 'r':-1, 'i':2}
+    # Remember that the sequence is ordered wrt the filters/keys in the ztf_band dict.
+    #
+    band_indices = {band: tf.cond(
+        tf.reduce_any(tf.equal(bands_tensor, band)),
+        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int64),
+        lambda: tf.constant(-1, dtype=tf.int64)) for band in ztf_band.keys()}
+    #
     for fil in ztf_band.keys():
       index_in_bands = band_indices[fil]
       is_in_bands = index_in_bands != -1
-
+      #
+      # If the band is available in the sequence then use sliding window
+      # Else pad zero of "max_len" for that band
+      #
       if is_in_bands:
+          #
+          # Extract the current band and adjust it to size "max_len"
+          #
           current_serie = sequence[idx:last_index[index_in_bands] + 1]
           mask_serie = mask[idx:last_index[index_in_bands] + 1]
-          current_serie, mask_serie = process_serie(current_serie, mask_serie, max_len, num_cols)
+          current_serie, mask_serie = get_window(current_serie, mask_serie, max_len, num_cols)
+          #
+          # Move to the next band in the sequence
+          #
           idx = last_index[index_in_bands] + 1
       else:
           current_serie = tf.zeros((max_len, num_cols), dtype=sequence.dtype)
           mask_serie = tf.zeros(max_len, dtype=mask.dtype)
-
+      #
       series.append(current_serie)
       mask_series.append(mask_serie)
-
+    #
     result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
+    #
     return result_series, result_mask
 
+
+
+@tf.function
+def binning(sequence, bin_width, drop_data):
+  '''
+  Bins the input sequence and randomly drops a fraction of the bins.
+  It's implemented as in Section:4.1 of the paper: RAINBOW (arXiv - https://arxiv.org/pdf/2310.02916)
+
+  Parameters:
+  ------------------------------------------------------------------------------
+    sequence: A TensorFlow tensor representing the input sequence.
+    bin_width: The width of the bins.
+    drop_data: The fraction of bins to drop.
+
+  Returns:
+  ------------------------------------------------------------------------------
+    A tuple containing:
+      - The modified sequence with dropped bins.
+      - A mask indicating the dropped bins (1 for dropped, 0 for kept).
+
+  '''
+  #
+  # The light curve time span was divided into "bin_width" day long bins
+  #
+  time = sequence[:,0]
+  #
+  min_time = tf.reduce_min(time)
+  max_time = tf.reduce_max(time)
+  #
+  bins = tf.range(min_time, max_time + bin_width, bin_width, dtype=time.dtype)
+  #
+  bin_index = tf.searchsorted(bins, time, side="left") # use left for lower-bound
+  #
+  # Find unique bin-index to drop
+  #
+  uniq_bin_index, time_index = tf.unique(bin_index)
+  #
+  num_bins_to_drop = tf.cast(tf.cast(tf.shape(uniq_bin_index)[0], tf.float32) * drop_data, tf.int32)
+  #
+  # Handle case where num_bins_to_drop is 0
+  #
+  num_bins_to_drop = tf.maximum(num_bins_to_drop, 1)
+  #
+  bin_index_drop = tf.random.shuffle(uniq_bin_index)[:num_bins_to_drop]
+  #
+  time_index_drop = tf.math.reduce_any(tf.equal(time_index[:, tf.newaxis], bin_index_drop), axis=1)
+  #
+  # Modify the sequence and the mask tensors with binned time-index to zero
+  #
+  mask_serie = tf.where(time_index_drop, tf.zeros_like(time_index_drop, dtype=sequence.dtype),
+                        tf.ones_like(time_index_drop, dtype=sequence.dtype))
+  new_serie = tf.where(tf.expand_dims(time_index_drop, axis=-1), tf.zeros_like(sequence), sequence)
+  #
+  return new_serie, mask_serie
+
+
+@tf.function
+def photometric_outlier(sequence, mask, mag_limit, mag_saturation):
+  """
+  Introduces photometric outliers to a sequence/magnitude.
+
+  Parameters:
+  ------------------------------------------------------------------------------
+      sequence: The input TensorFlow tensor.
+      mask: mask indicating the indices to be modified (where mask=1).
+      mag_limit: The upper limit for magnitude.
+      mag_saturation: The lower limit for magnitude.
+
+  Returns:
+  ------------------------------------------------------------------------------
+      The modified sequence with added outliers.
+  """
+  #
+  # Get the indices where the mask is 1
+  #
+  valid_indices = tf.where(mask)
+  random_index = tf.constant(-1, dtype=tf.int32)
+  num_valid_indices = tf.shape(valid_indices)[0]
+  #
+  # Add outliers only when all(mask)!=0
+  #
+  if num_valid_indices != 0:
+
+    random_index = tf.random.shuffle(valid_indices)[0]
+    random_index = tf.squeeze(random_index)
+    #
+    # Filter the sequence/mag
+    #
+    mag = tf.gather(sequence, random_index)
+    #
+    # Lower the mag value below the detection limit
+    #
+    mag =  mag_saturation - tf.random.uniform([], 0, 0.5, dtype=sequence.dtype)
+    mag = tf.cast(mag, sequence.dtype)
+    indices = tf.reshape(random_index, [1])
+    updates = tf.reshape(mag, [1])
+    #
+    # Update the sequence
+    #
+    sequence = tf.tensor_scatter_nd_update(sequence, tf.expand_dims(indices, axis=-1), updates)
+
+  return sequence
+
+
+@tf.function
 def gaussian_noise(sequence, noise_level=0.1):
     """
-    Adds white Gaussian noise to a sequence.
+    Adds white Gaussian noise to a sequence/magnitude for augmentation.
 
-    Args:
-        sequence: A TensorFlow tensor representing the sequence.
+    Parameters:
+    ----------------------------------------------------------------------------
+        sequence: A TensorFlow tensor representing the sequence/magnitude.
         noise_level: The standard deviation of the Gaussian noise.
 
     Returns:
+    ----------------------------------------------------------------------------
         A TensorFlow tensor representing the sequence with added noise.
     """
-    # Get the length of the sequence
+    #
+    # Get the length of the sequence and reshape it for correct broadcasting
+    #
     length = tf.shape(sequence)[0]
-    # Reshape sequence to (length, 1) to ensure correct broadcasting
     sequence = tf.reshape(sequence, (length, 1))
-    # print("length", length, sequence.dtype)
-
+    #
     # Generate Gaussian noise with mean 0 and specified standard deviation
+    #
     noise = tf.random.normal(shape=(length, 1), mean=0.0, stddev=noise_level, dtype=sequence.dtype)
-    # print("noise", noise)
-    # print("seq", sequence)
-
+    #
     # Add the noise to the sequence
+    #
     noisy_sequence = sequence + noise
-    # print("noisy", noisy_sequence)
 
     return noisy_sequence
 
-
-
-
-def standardize(x, err):
-    """
-    Standardizes the input tensor 'x' using a weighted average based on the 'err' tensor.
-
-    Args:
-        x: A TensorFlow tensor representing the data.
-        err: A TensorFlow tensor representing the corresponding errors (uncertainties).
-
-    Returns:
-        A TensorFlow tensor 'x_' containing the standardized data.
-    """
-
-    # Replace NaN values in 'x' with zeros
-    x = tf.where(tf.math.is_nan(x), tf.zeros_like(x), x)
-
-    # Replace NaN values in 'err' with ones (equivalent to no weight)
-    err = tf.where(tf.math.is_nan(err), tf.ones_like(err), err)
-
-
-    # Ensure err is not zero to avoid division by zero
-    err = tf.where(tf.equal(err, 0), tf.ones_like(err), err) # replace every zero in err with 1 so that no nan are produced.
-
-    # Calculate the weights (inverse of squared errors)
-    weights = 1.0 / tf.square(err)
-
-    # Calculate the weighted mean
-    weighted_sum = tf.reduce_sum(x * weights)
-    sum_of_weights = tf.reduce_sum(weights)
-
-    mean = weighted_sum / sum_of_weights
-
-    # Center the data by subtracting the weighted mean
-    x_ = x - mean
-
-    return x_ , mean
-
-
-
-
-
+@tf.function
 def deserialize(sample):
     '''
-    "mjd", "mag", "magerr", "band_sorted"
+    Deserialize the tf.records into an input dict format.
+    The columns of each lightcurve in ZTF is in the order: "mjd", "mag", "magerr", "band_sorted"
+
+    NOTE: "num_keys" param should be the total columns in each lightcurve.
+
+    Parameters:
+    ---------------------------------------------------------------------------------------------
+    sample: tf.records sample
+
+    Returns:
+    ---------------------------------------------------------------------------------------------
+    input_dict
     '''
+    num_keys = 4
+    input_dict = dict()
+    sequence_features = dict()
+    casted_inp_parameters = []
 
     context_features = {'label': tf.io.FixedLenFeature([],dtype=tf.string),
                         'bands': tf.io.VarLenFeature(dtype=tf.string),
                         'last_index': tf.io.VarLenFeature(dtype=tf.int64),
                         'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
-
-    num_keys = 4
-
-    sequence_features = dict()
 
     for i in range(num_keys):
         sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
@@ -246,14 +286,11 @@ def deserialize(sample):
                             sequence_features=sequence_features
                             )
 
-    input_dict = dict()
     input_dict['id']   = tf.cast(context['id'], tf.int64)
-    input_dict['last_index'] = tf.sparse.to_dense(context['last_index'])#changed
+    input_dict['last_index'] = tf.sparse.to_dense(context['last_index'])
     input_dict['label']  = tf.cast(context['label'], tf.string)
     input_dict['bands']  = tf.sparse.to_dense(context['bands'])
 
-
-    casted_inp_parameters = []
 
     for i in range(num_keys):
         seq_dim = sequence['dim_{}'.format(i)]
@@ -268,78 +305,146 @@ def deserialize(sample):
     return input_dict
 
 
-def augmentation(data,
-                 maxlen,
-                 sliding_window,
-                 window_size,
-                 binning,
-                 bin_width,
-                 keep_data,
-                 add_noise,
-                 add_outlier):
 
+@tf.function
+def augmentation(data,
+                 apply_white_noise=False,
+                 apply_binning=False,
+                 apply_outlier=False,
+                 maxlen=400,
+                 bin_width=5,
+                 drop_data=0.50,
+                ):
+  '''
+  Augments the input data with various photometric transformations.
+
+  Parameters:
+  ------------------------------------------------------------------------------------
+    data: Input data in tf.records format.
+    apply_white_noise (bool): Whether to apply Gaussian noise to the magnitude.
+    apply_binning (bool): Whether to apply binning and random dropping of bins.
+    apply_outlier (bool): Whether to introduce photometric outliers.
+    maxlen (int): The maximum length of each band sequence after sliding window.
+    bin_width (int): The width of the bins for binning.
+    drop_data (float): The fraction of bins to drop during binning. Provide valie between 0 and 1.
+
+  Returns:
+  ------------------------------------------------------------------------------------
+    The augmented input data as a TensorFlow tensor.
+  '''
+  input_seq = dict()
   if data is not None:
+    #
+    # Deserialize the data from tf.records
+    #
     input_dict = deserialize(data)
     mag = input_dict['input_id'][:,1]
     magerr = input_dict['input_id'][:,2]
-    mjd = input_dict['input_id'][:,0]
-    
-    new_mag, mean = standardize(mag, magerr)
-    
-
-    if add_noise:
+    #
+    # Standardize the magnitude
+    #
+    new_mag, _ = standardize(mag, magerr)
+    input_seq['ori_mag'] = new_mag
+    #
+    # Create the mask_serie
+    #
+    mask = tf.ones(tf.shape(new_mag), dtype=new_mag.dtype)
+    #
+    # Apply augmentation and add a masking tensor
+    #
+    if apply_white_noise:
+      #
       new_mag = gaussian_noise(new_mag)
-
+    #
     new_input = tf.concat([
                             input_dict['input_id'][:, 0:1], #mjd
-                            tf.reshape(new_mag, (-1,1)),#the new standardized magnitude
-                            input_dict['input_id'][:, 2:]#magerr and band_sorted
-                        ], axis=1)
+                            tf.reshape(new_mag, (-1,1)),
+                            input_dict['input_id'][:, 2:] #magerr and band_sorted
+                          ], axis=1)
 
-    # # input_dict['input'] = new_input #replaces original with the updated version.
+    if apply_binning:
+      new_input, mask = binning(new_input, bin_width, drop_data)
+    #
+    # Apply sliding_window for a fixed length sequence
+    #
+    new_input, mask = sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
+    #
+    #
+    #
+    if apply_outlier:
+      #
+      # The mag_limit and mag_saturation are determined by examining 99% of the
+      # standardized magnitude value of the largest dataset
+      #
+      mag_limit = ztf_mag['limit']
+      mag_saturation = ztf_mag['saturation']
+      #
+      new_mag = photometric_outlier(new_input[:, 1], mask, mag_limit, mag_saturation)
+
+      new_input = tf.concat([
+                              new_input[:, 0:1], #mjd
+                              tf.reshape(new_mag, (-1,1)),
+                              new_input[:, 2:] #magerr and band_sorted
+                            ], axis=1)
+
+    input_seq['input'] = new_input[:, 1]
+    input_seq['times'] = new_input[:, 0]
+    input_seq['band_info'] = new_input[:, 3]
+    input_seq['mask'] = mask
+    input_seq['last_index'] = input_dict['last_index']
+    input_seq['bands'] = input_dict['bands']
+    input_seq['id'] = input_dict['id']
+    input_seq['label'] = input_dict['label']
+    #
+    return input_seq
 
 
-    if binning:
-      new_input, mask = bin_lc3(new_input, bin_width, keep_data)
 
-    new_input, mask = get_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
-
-    if add_outlier:
-      mag_limit = 21
-      mag_saturation = 13.5
-      new_mag, idx = photometric_outlier(new_input[:, 1], mask, mag_limit, mag_saturation)
-
-    new_input = tf.concat([
-                            new_input[:, 0:1], #mjd
-                            tf.reshape(new_mag, (-1,1)),#the new standardized magnitude
-                            new_input[:, 2:]#magerr and band_sorted
-                        ], axis=1)
-
-
-    return new_input
-
-
-
-
-
-
-
-
-
-def prefetch_batches(source,
-                        seed=42,
+def contrastive_data_loader(source,
+                        seed=1024,
                         batch_size=100,
-                        maxlen=200,
-                        sliding_window=True,
-                        window_size=0.5,
-                        binning = True,
-                        bin_width = 5,
-                        drop_data = 0.6,
-                        add_noise = True,
-                        add_outlier = True):
+                        num_model=3,
+                        apply_white_noise=[False, True, True],
+                        apply_binning=[False, True, True],
+                        apply_outlier=[False, False, True],
+                        maxlen=[200, 100, 200],
+                        bin_width=[5, 5, 5],
+                        drop_data=[0.0, 0.20, 0.60]):
+
+    """
+    Data loader with augmentation. This method build the input format for the model.
+    The augmented data is in the sequence: anchor, positive, negative.
+
+    Parameters:
+    -----------------------------------------------------------------------------------
+        source (string): Record folder
+                         NOTE: source is of the format - /train/partition_{n}/{class}/chunk_{n}_{m}.record
+        seed (int): Random seed.
+        batch_size (int): Batch size
+        num_model (int): Number of models for contrastive learning. We have considered a triplet model.
+        apply_white_noise (list of bool): Whether to apply Gaussian noise to the magnitude. Provide values for each model.
+        apply_binning (list of bool): Whether to apply binning and random dropping of bins. Provide values for each model.
+        apply_outlier (list of bool): Whether to introduce photometric outliers. Provide values for each model.
+        maxlen (list of int): The maximum length of each band sequence after sliding window. Provide values for each model.
+        bin_width (list of int): The width of the bins for binning. Provide values for each model.
+        drop_data (list of float): The fraction of bins to drop during binning. Provide valie between 0 and 1. Provide values for each model.
+
+    Returns:
+    -----------------------------------------------------------------------------------
+        Tensorflow Dataset: Iterator with augmented batches.
+    """
+
+    try:
+      if len(apply_white_noise) != num_model or len(apply_binning) != num_model or len(apply_outlier) != num_model or len(maxlen) != num_model or len(bin_width) != num_model or len(drop_data) != num_model:
+        raise ValueError(f"Please provide valid values for the parameters - 'apply_white_noise', 'apply_binning', 'apply_outlier', 'maxlen', 'bin_width', 'drop_data'."
+                          f"\nLength of each parameters should be equal to 'num_model'!\n")
+    except Exception as e:
+      print(e)
+      return None
 
     labels = list()
     chunks = list()
+    loaders = tuple()
     filenames = list()
     #
     #
@@ -348,36 +453,27 @@ def prefetch_batches(source,
         for lbl in os.listdir(source+p):
             for cnk in os.listdir(source+p+"/"+lbl):
                 filenames.append(source+p+"/"+lbl+'/'+cnk)
-
-    for f in filenames:
-        #
-        #
-        #
-        dataset = tf.data.TFRecordDataset(f)
-        #
-        #
-        #
-        #
-        #
-        #
-        dataset = dataset.shuffle(seed).map(lambda data: augmentation(data,
-                                                                        maxlen,
-                                                                        sliding_window,
-                                                                        window_size,
-                                                                        binning,
-                                                                        bin_width,
-                                                                        drop_data,
-                                                                        add_noise,
-                                                                        add_outlier))
-
-        dataset = dataset.padded_batch(batch_size).cache()
-        dataset = dataset.prefetch(buffer_size=AUTO)
-    
-        #
-        #
-        #
-    return dataset
-
-
-
-
+    #
+    #
+    #
+    dataset = tf.data.TFRecordDataset(filenames)
+    #
+    for i  in range(num_model):
+      #
+      #
+      #
+      loader = dataset.shuffle(buffer_size=10000, reshuffle_each_iteration=True, seed=seed).map(lambda data: augmentation(data,
+                                                                                                                            apply_white_noise=apply_white_noise[i],
+                                                                                                                            apply_binning=apply_binning[i],
+                                                                                                                            apply_outlier=apply_outlier[i],
+                                                                                                                            maxlen=maxlen[i],
+                                                                                                                            bin_width=bin_width[i],
+                                                                                                                            drop_data=drop_data[i]))
+      loaders += (loader, )
+    #
+    # Zip the dataset together
+    #
+    loaders = tf.data.Dataset.zip(loaders)
+    loaders = loaders.padded_batch(batch_size).cache().prefetch(buffer_size=AUTO)
+    #
+    return loaders
