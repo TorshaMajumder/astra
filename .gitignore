@@ -9,7 +9,6 @@ dataset/
 data/
 
 # Notebooks
-notebooks/check_parallel_jobs.ipynb
 
 
 # Byte-compiled / optimized / DLL files
@@ -72,5 +71,6 @@ ENV/
 
 
 
-
+## Remove setup.py
+setup.py
 

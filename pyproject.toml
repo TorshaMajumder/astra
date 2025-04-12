@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools", "wheel"]  # Specifies the build system requirements
+build-backend = "setuptools.build_meta" # Specifies the build backend
+
+[project]
+name = "dart" # Project name
+version = "1.0.0" # Placeholder or default version
+# Dynamic versioning is generally preferred.  See note below.
+
+
+authors = [
+  { name = "Your Name", email = "your_email@example.com" }, # Author information
+]
+
+description = "A short description of your package" # Short description
+readme = "README.md" # Long description location.  Assumes you have a README.md
+requires-python = ">=3.9"  # Minimum Python version supported
+
+# Classifiers from your setup.py
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License", #Added a placeholder, please check
+    "Operating System :: OS Independent",
+]
+
+dependencies = [] # Initialize dependencies list
+# Dynamic dependencies loading.  See details below.
+# dependencies = ["package1>=1.0", "package2<2.0"] # Example of hardcoded dependencies
+
+
+[project.urls]
+Homepage = 'https://your-package-url.com' # Project URL
+
+[project.scripts]
+dart-data = "scripts.generate_data:main" # Entry point for dart-data
+dart-transformer = "scripts.training:main" # Entry point for dart-transformer
+
+
+[tool.setuptools]
+packages = ["dart", "scripts"] # Explicitly list your packages.  find_packages() is default, but good to be explicit.
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION.txt"} # Dynamic version 
+dependencies = {file = "requirements.txt"} # Dynamic dependencies from requirements.txt
+
+
+
