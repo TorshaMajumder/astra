@@ -9,7 +9,7 @@ dataset/
 data/
 
 # Notebooks
-notebooks/check_parallel_jobs,ipynb
+notebooks/check_parallel_jobs.ipynb
 
 
 # Byte-compiled / optimized / DLL files
