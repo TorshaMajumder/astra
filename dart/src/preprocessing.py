@@ -332,6 +332,7 @@ def augmentation(data,
   ------------------------------------------------------------------------------------
     The augmented input data as a TensorFlow tensor.
   '''
+  #
   input_seq = dict()
   if data is not None:
     #
@@ -341,7 +342,7 @@ def augmentation(data,
     mag = input_dict['input_id'][:,1]
     magerr = input_dict['input_id'][:,2]
     #
-    # Standardize the magnitude
+    # Standardize the magnitude of the light curve 
     #
     new_mag, _ = standardize(mag, magerr)
     input_seq['ori_mag'] = new_mag
