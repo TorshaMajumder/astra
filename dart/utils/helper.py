@@ -140,5 +140,6 @@ if __name__ == "__main__":
     path_to_read = "/media3/majumder/dataset/cepheids/val/"
     path_to_store = "/media3/majumder/dataset/cepheids/finetuning/"
     objects_per_chunk = 100
-    generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk)
+    threshold = 18.0
+    generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk, theshold)
 
