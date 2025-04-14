@@ -8,8 +8,9 @@ import warnings
 import traceback
 from lsdb import read_hats
 from dask.distributed import Client
-from dart.src.dataset import create_dataset
 from dart.bands.bands import ztf_band
+from dart.src.dataset import create_dataset
+from dart.utils.helper import generate_data_finetuning
 
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
@@ -35,7 +36,9 @@ def main():
     parser.add_argument('--max_lcs_per_chunk', default=100, type=int,
                     help='Number of lcs to be stored in a tf record chunk.')  
     parser.add_argument('--train_size', default=0.8, type=float,
-                    help='Training fraction.')     
+                    help='Training fraction.') 
+    parser.add_argument('--threshold_finetuning', default=18.0, type=float,
+                    help='Magnitude threshold for filter data for finetuning.')      
 
    
     args = parser.parse_args()
@@ -57,6 +60,11 @@ def main():
 
     with Client() as client:
         catalog_compute.compute(scheduler='processes')
+
+    #
+    # Generate data for finetuning from the validation folder
+    #
+    generate_data_finetuning(args.target+"val/", args.target, args.max_lcs_per_chunk, args.threshold_finetuning)
 
     
 

@@ -66,9 +66,9 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
     filenames = list()
     weighted_mean = list()
     #
-    # Create the path_to_store directory if it doesn't exist
+    # Create the finetuning directory if it doesn't exist
     #
-    os.makedirs(path_to_store, exist_ok=True)
+    os.makedirs(os.path.join(path_to_store, "finetuning"), exist_ok=True)
     #
     for p in os.listdir(path_to_read):
         for lbl in os.listdir(path_to_read+p):
@@ -86,7 +86,7 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
         # Create a new writer for the current chunk
         #
         if object_count == 0:
-            writer = tf.io.TFRecordWriter(path_to_store + f"chunk_{chunk_index}.record")
+            writer = tf.io.TFRecordWriter(path_to_store + f"finetuning/chunk_{chunk_index}.record")
 
         example = tf.train.SequenceExample()
         example.ParseFromString(rec.numpy())
@@ -136,10 +136,4 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
 
     
 
-if __name__ == "__main__":
-    path_to_read = "/media3/majumder/dataset/cepheids/val/"
-    path_to_store = "/media3/majumder/dataset/cepheids/finetuning/"
-    objects_per_chunk = 100
-    threshold = 18.0
-    generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk, theshold)
 
