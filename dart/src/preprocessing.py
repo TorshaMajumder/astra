@@ -443,17 +443,14 @@ def contrastive_data_loader(source,
       print(e)
       return None
 
-    labels = list()
-    chunks = list()
     loaders = tuple()
     filenames = list()
     #
     #
     #
-    for p in os.listdir(source):
-        for lbl in os.listdir(source+p):
-            for cnk in os.listdir(source+p+"/"+lbl):
-                filenames.append(source+p+"/"+lbl+'/'+cnk)
+    for root, _, files in os.walk(source):
+      for file_ in files:
+        filenames.append(os.path.join(root, file_))
     #
     #
     #

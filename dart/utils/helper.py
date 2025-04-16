@@ -60,9 +60,6 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
     chunk_index = 0
     start_index = 0
     object_count = 0
-    threshold = 18.0
-    labels = list()
-    chunks = list()
     filenames = list()
     weighted_mean = list()
     #
@@ -70,12 +67,11 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
     #
     os.makedirs(os.path.join(path_to_store, "finetuning"), exist_ok=True)
     #
-    for p in os.listdir(path_to_read):
-        for lbl in os.listdir(path_to_read+p):
-            for cnk in os.listdir(path_to_read+p+"/"+lbl):
-                filenames.append(path_to_read+p+"/"+lbl+'/'+cnk)
+    #
+    for root, _, files in os.walk(path_to_read):
+      for file_ in files:
+        filenames.append(os.path.join(root, file_))
 
-    
     
     dataset = tf.data.TFRecordDataset(filenames)
     #
