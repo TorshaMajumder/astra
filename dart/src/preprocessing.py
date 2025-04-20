@@ -47,7 +47,7 @@ def get_window(current_serie, mask_serie, max_len, num_cols):
       #
       zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
       current_serie = tf.concat([current_serie, zero_padding], axis=0)
-      mask_serie = tf.concat([mask_serie, tf.zeros([padding_rows], dtype=mask_serie.dtype)], axis=0)
+      mask_serie = tf.concat([mask_serie, tf.ones([padding_rows], dtype=mask_serie.dtype)], axis=0)
 
   return current_serie, mask_serie
 
@@ -108,7 +108,7 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
           idx = last_index[index_in_bands] + 1
       else:
           current_serie = tf.zeros((max_len, num_cols), dtype=sequence.dtype)
-          mask_serie = tf.zeros(max_len, dtype=mask.dtype)
+          mask_serie = tf.ones(max_len, dtype=mask.dtype)
       #
       series.append(current_serie)
       mask_series.append(mask_serie)
@@ -135,9 +135,14 @@ def binning(sequence, bin_width, drop_data):
   ------------------------------------------------------------------------------
     A tuple containing:
       - The modified sequence with dropped bins.
-      - A mask indicating the dropped bins (1 for dropped, 0 for kept).
+      - A mask indicating the dropped bins (1 for dropped/masked, 0 for kept/unmasked).
+        The masking convention is matched with the original Transformer paper.
 
   '''
+  #
+  # If binning is True then 0.0<drop_data<=1
+  #
+  assert drop_data > 0.0 and drop_data <= 1.0 
   #
   # The light curve time span was divided into "bin_width" day long bins
   #
@@ -166,8 +171,8 @@ def binning(sequence, bin_width, drop_data):
   #
   # Modify the sequence and the mask tensors with binned time-index to zero
   #
-  mask_serie = tf.where(time_index_drop, tf.zeros_like(time_index_drop, dtype=sequence.dtype),
-                        tf.ones_like(time_index_drop, dtype=sequence.dtype))
+  mask_serie = tf.where(time_index_drop, tf.ones_like(time_index_drop, dtype=sequence.dtype),
+                        tf.zeros_like(time_index_drop, dtype=sequence.dtype))
   new_serie = tf.where(tf.expand_dims(time_index_drop, axis=-1), tf.zeros_like(sequence), sequence)
   #
   return new_serie, mask_serie
@@ -190,9 +195,9 @@ def photometric_outlier(sequence, mask, mag_limit, mag_saturation):
       The modified sequence with added outliers.
   """
   #
-  # Get the indices where the mask is 1
+  # Get the indices where the mask is 0
   #
-  valid_indices = tf.where(mask)
+  valid_indices = tf.where(tf.equal(mask, 0.0)) 
   random_index = tf.constant(-1, dtype=tf.int32)
   num_valid_indices = tf.shape(valid_indices)[0]
   #
@@ -317,19 +322,24 @@ def augmentation(data,
                 ):
   '''
   Augments the input data with various photometric transformations.
+  Convention: The original Transformer paper and most implementations follow this convention:
+
+  0: Unmasked values (positions the model can attend to)
+  1: Masked values (positions the model should ignore)
+
 
   Parameters:
-  ------------------------------------------------------------------------------------
+  -------------------------------------------------------------------------------------------------------
     data: Input data in tf.records format.
     apply_white_noise (bool): Whether to apply Gaussian noise to the magnitude.
     apply_binning (bool): Whether to apply binning and random dropping of bins.
     apply_outlier (bool): Whether to introduce photometric outliers.
     maxlen (int): The maximum length of each band sequence after sliding window.
     bin_width (int): The width of the bins for binning.
-    drop_data (float): The fraction of bins to drop during binning. Provide valie between 0 and 1.
+    drop_data (float): The fraction of bins to drop during binning. Provide value 0.0 < drop_data <=1 .
 
   Returns:
-  ------------------------------------------------------------------------------------
+  -------------------------------------------------------------------------------------------------------
     The augmented input data as a TensorFlow tensor.
   '''
   #
@@ -349,7 +359,7 @@ def augmentation(data,
     #
     # Create the mask_serie
     #
-    mask = tf.ones(tf.shape(new_mag), dtype=new_mag.dtype)
+    mask = tf.zeros(tf.shape(new_mag), dtype=new_mag.dtype)
     #
     # Apply augmentation and add a masking tensor
     #
@@ -388,10 +398,10 @@ def augmentation(data,
                               new_input[:, 2:] #magerr and band_sorted
                             ], axis=1)
 
-    input_seq['input'] = new_input[:, 1]
-    input_seq['times'] = new_input[:, 0]
-    input_seq['band_info'] = new_input[:, 3]
-    input_seq['mask'] = mask
+    input_seq['input'] = tf.expand_dims(new_input[:, 1], axis=-1)
+    input_seq['times'] = tf.expand_dims(new_input[:, 0], axis=-1)
+    input_seq['band_info'] = tf.expand_dims(new_input[:, 3], axis=-1)
+    input_seq['mask'] = tf.expand_dims(mask, axis=-1)
     input_seq['last_index'] = input_dict['last_index']
     input_seq['bands'] = input_dict['bands']
     input_seq['id'] = input_dict['id']
@@ -432,7 +442,7 @@ def contrastive_data_loader(source,
 
     Returns:
     -----------------------------------------------------------------------------------
-        Tensorflow Dataset: Iterator with augmented batches.
+        Tensorflow Dataset: Iterator with augmented batches. 
     """
 
     try:
