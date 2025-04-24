@@ -371,7 +371,7 @@ def train(model,
             if step % 20 == 0:
                 # current_lr = optimizer.lr(optimizer.iterations).numpy() if hasattr(optimizer.lr, '__call__') else optimizer.lr.numpy()
                 current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
-                pbar_train.set_postfix({'train_loss': f'{train_loss.numpy():.4f}', 'lr': f'{current_lr:.1E}'})
+                pbar_train.set_postfix({'Train Loss': f'{train_loss.numpy():.4f}', 'LR': f'{current_lr:.1E}'})
         # --- End Training Epoch ---
         
         # --- Validation Epoch ---
