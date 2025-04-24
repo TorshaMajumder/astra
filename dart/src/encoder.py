@@ -185,27 +185,27 @@ class EncoderLayer(layers.Layer):
 
         attn_output = self.dropout1(attn_output, training=training)
 
-        if self.use_res:
-            out1 = self.layernorm1(x + attn_output)
-        else:
-            out1 = self.layernorm1(attn_output)
+        # if self.use_res:
+        out1 = self.layernorm1(x + attn_output)
+        # else:
+        #     out1 = self.layernorm1(attn_output)
 
 
         ffn_output = self.ffn(out1)
 
         ffn_output = self.dropout2(ffn_output, training=training)
 
-        if self.use_res:
-            out2 = self.layernorm2(out1 + ffn_output)
-        else:
-            out2 = self.layernorm2(ffn_output)
+        # if self.use_res:
+        out2 = self.layernorm2(out1 + ffn_output)
+        # else:
+        #     out2 = self.layernorm2(ffn_output)
 
         return out2
 
 
 class Encoder(layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1, use_res=True, **kwargs):
-        super(Encoder, self).__init__(**kwargs)
+    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1, use_res=True, name="encoder", **kwargs):
+        super(Encoder, self).__init__(name=name, **kwargs)
 
 
         self.d_model = d_model

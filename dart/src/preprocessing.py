@@ -313,6 +313,7 @@ def deserialize(sample):
 
 @tf.function
 def augmentation(data,
+                 noise_level=0.1,
                  apply_white_noise=False,
                  apply_binning=False,
                  apply_outlier=False,
@@ -365,7 +366,7 @@ def augmentation(data,
     #
     if apply_white_noise:
       #
-      new_mag = gaussian_noise(new_mag)
+      new_mag = gaussian_noise(new_mag, noise_level)
     #
     new_input = tf.concat([
                             input_dict['input_id'][:, 0:1], #mjd
@@ -413,7 +414,7 @@ def contrastive_data_loader(source,
                             seed=1024,
                             batch_size=100,
                             apply_white_noise=(False, True, True), # Use tuple
-                            # noise_levels=(0.0, 0.1, 0.2), # Separate noise levels
+                            noise_levels=(0.0, 0.1, 0.2), # Separate noise levels
                             apply_binning=(False, False, True), # Adjusted defaults based on user code
                             apply_outlier=(False, False, True),
                             maxlens=(200, 100, 200), # Use tuple
@@ -468,7 +469,7 @@ def contrastive_data_loader(source,
         # Use lambda function with default arguments to capture loop variables correctly
         aug_fn = lambda data, idx=i: augmentation(data,
                                                    apply_white_noise=apply_white_noise[idx],
-                                                  #  noise_level=noise_levels[idx],
+                                                   noise_level=noise_levels[idx],
                                                    apply_binning=apply_binning[idx],
                                                    apply_outlier=apply_outlier[idx],
                                                    maxlen=maxlens[idx],

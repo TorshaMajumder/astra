@@ -13,6 +13,8 @@ from tensorflow.keras import layers
 from dart.src.encoder   import Encoder
 from dart.src.loss import nt_xent_loss_3views 
 from tensorflow.keras.optimizers import Adam
+from dart.src.embedding import TimeSeriesEmbedding
+from dart.src.header import ProjectionHead
 from dart.src.preprocessing import contrastive_data_loader
 from dart.src.scheduler import CustomSchedule, warmup_schedule
 
@@ -24,34 +26,52 @@ os.system('clear')
 class AstroTransformer(tf.keras.Model):
     def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1,
                  base=10000.0, use_res=True, use_band_info=True,
-                 use_drop=False, mjd=True, projection_dim=None, **kwargs):
-        super(AstroTransformer, self).__init__(**kwargs)
+                 use_drop=False, mjd=True, projection_dim=None, name="astro_transformer", **kwargs):
+        super(AstroTransformer, self).__init__(name=name, **kwargs)
 
 
 
-        self.mjd = mjd
-        self.base = base
+        # self.mjd = mjd
+        # self.base = base
         self.d_model = d_model
-        self.use_drop = use_drop
-        self.use_band_info = use_band_info
+        # self.use_drop = use_drop
+        # self.use_band_info = use_band_info
 
-        # Embedding layers
-        self.input_dense = layers.Dense(d_model, name="input_embedding") # Embed magnitude feature
-        self.pos_encoding_layer = self.build_positional_encoding() # Precompute or build layer
+        # 1. Instantiate Embedding Layer
+        self.embedding_layer = TimeSeriesEmbedding(
+                                                    d_model=d_model, base=base, rate=rate, # Pass shared rate
+                                                    use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
+                                                )
 
-        if self.use_band_info:
-            # Embed band info (log frequency)
-            self.band_dense = layers.Dense(d_model, name="band_embedding")
+        # self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate, use_res, name='encoder')
+        
+        self.encoder = Encoder(
+                                    num_layers=num_layers, d_model=d_model, num_heads=num_heads,
+                                    dff=dff, rate=rate, use_res=use_res 
+                                )
+        # # Embedding layers
+        # self.input_dense = layers.Dense(d_model, name="input_embedding") # Embed magnitude feature
+        # self.pos_encoding_layer = self.build_positional_encoding() # Precompute or build layer
+
+        # if self.use_band_info:
+        #     # Embed band info (log frequency)
+        #     self.band_dense = layers.Dense(d_model, name="band_embedding")
 
 
 
-        self.dropout = layers.Dropout(rate)
+        # self.dropout = layers.Dropout(rate)
         # self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate, name='encoder')
         self.pooling = layers.GlobalAveragePooling1D(name='avg_pooling')
 
+        # 4. Instantiate Projection Head Layer
+        self.projection_head_layer = ProjectionHead(
+                                                        d_model=d_model, # Pass d_model needed by the head's first layer
+                                                        projection_dim=projection_dim
+                                                    )
+
         # self.embedding = TimeSeriesEmbedding(d_model=d_model, base=base, rate=rate, use_band_info=use_band_info, use_drop=use_drop, mjd=mjd)
 
-        self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate, use_res, name='encoder')
+        
 
         # Encoder(num_layers=2, d_model=512, num_heads=4, dff=2048, rate=0.1, base=10000.0, use_res=True)
         # self.decoder = ProjectionHead(1, name='ProjectionHead')
@@ -61,110 +81,67 @@ class AstroTransformer(tf.keras.Model):
         # Alternative: Max Pooling/Attention-Based Pooling
         # self.decoder = tf.keras.layers.Dense(1)
         # Optional Projection Head (SimCLR style)
-        self.projection_head = None
-        if projection_dim:
-            self.projection_head = tf.keras.Sequential([
-                layers.Dense(d_model, activation='relu', name='projection1'), # Project back to d_model
-                layers.Dense(projection_dim, name='projection2') # Final projection dim
-            ], name='projection_head')
+        # self.projection_head = None
+        # if projection_dim:
+        #     self.projection_head = tf.keras.Sequential([
+        #         layers.Dense(d_model, activation='relu', name='projection1'), # Project back to d_model
+        #         layers.Dense(projection_dim, name='projection2') # Final projection dim
+        #     ], name='projection_head')
 
 
-    def build_positional_encoding(self):
-        # Using fixed sinusoidal encoding based on indices, assuming MJD values are too large/sparse
-        # If MJD-based PE is desired, uncomment the MJD logic below
-        # For index-based PE, we need a max sequence length. Let's assume a reasonable upper bound.
-        # Or create dynamically? For now, let's stick to the time-based approach.
-
-        def positional_encoding(times):
-            """
-            Calculates positional encoding. This is implemented as in the original Transformer paper.
-            Follow the link: http://nlp.seas.harvard.edu/2018/04/03/attention.html
-
-            Parameters:
-            -----------------------------------------------------------------
-                times (tf.Tensor): Time values.
-
-            Returns:
-            -----------------------------------------------------------------
-                tf.Tensor: Positional encoding tensor.
-            """
-
-
-            if self.mjd:
-                indices = times
-            else:
-                #
-                # If MJD is False then the timestep will be np.arange(0, times.shape[1]/seq_len)
-                #
-                indices = tf.tile(tf.expand_dims(tf.range(tf.shape(times)[1], dtype=times.dtype), 0), [tf.shape(times)[0], 1])
-                indices = tf.expand_dims(indices, 2)
-
-            angle_rates = tf.exp((2.0*(tf.range(self.d_model, dtype=times.dtype)//2)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
-            angle_rates = angle_rates[tf.newaxis, tf.newaxis, :]
-            angle_rads = indices * angle_rates
-            #
-            # Use SIN and COSINE function for even and odd indices
-            #
-            # angle_rads = tf.where(tf.math.floormod(tf.range(self.d_model), 2) == 0,
-            #                       tf.sin(angle_rads[:, :, :]),
-            #                       tf.cos(angle_rads[:, :, :]))
-            # Apply sin to even indices in the array; 2i
-            sines = tf.sin(angle_rads[:, :, 0::2])
-            # Apply cos to odd indices in the array; 2i+1
-            cosines = tf.cos(angle_rads[:, :, 1::2])
-
-            # Interleave sines and cosines
-            # Get shape of angle_rads
-            pos_encoding = tf.reshape(
-                tf.stack([sines, cosines], axis=-1),
-                [tf.shape(times)[0], tf.shape(times)[1], self.d_model]
-            )
-
-            # Handle odd d_model dimension if necessary (by padding or adjusting range)
-            if self.d_model % 2 != 0:
-                # Simple approach: repeat last element or handle based on original paper
-                # For now, ensure d_model is even or handle this case explicitly
-                pass # Assuming d_model is even for simplicity
-
-
-
-            return tf.cast(pos_encoding, dtype=times.dtype)
-
-        return positional_encoding
-
-
+    
     def call(self, x, training=False):
-        # x = self.embedding(x['input'], x['times'], x['band_info'])
-        # x is a dictionary: {'input', 'times', 'band_info', 'mask'}
-        input_seq = x['input'] # (batch, seq_len, 1)
-        times = x['times']     # (batch, seq_len, 1)
+        """
+        Forward pass through the AstroTransformer.
+
+        Args:
+            x (dict): Input dictionary containing:
+                'input': Magnitude tensor (batch, seq_len, 1)
+                'times': Time tensor (batch, seq_len, 1)
+                'band_info': Band tensor (batch, seq_len, 1) (optional)
+                'mask': Mask tensor (batch, seq_len) or (batch, seq_len, 1)
+            training (bool): Flag for training mode (affects Dropout, BN).
+
+        Returns:
+            tf.Tensor: Final output tensor, usually after projection head.
+                       Shape: (batch_size, projection_dim) or (batch_size, d_model) if no projection.
+        """
+        if not isinstance(x, dict) or not all(k in x for k in ['input', 'times', 'mask']):
+             raise ValueError("Input 'x' must be a dictionary containing at least 'input', 'times', and 'mask'.")
+        
         mask = x['mask']       # (batch, seq_len) - ensure last dim is squeezed
+        # Ensure mask has the correct shape (batch, seq_len) for Encoder/Pooling
+        if len(mask.shape) == 3 and tf.shape(mask)[-1] == 1:
+             mask = tf.squeeze(mask, axis=-1)
+        elif len(mask.shape) != 2:
+             raise ValueError(f"Unexpected mask shape in AstroTransformer: {tf.shape(mask)}. Expected (batch, seq_len).")
+
+        # 1. Apply Embedding Layer (takes the dictionary 'x')
+        # Pass training flag for potential dropout in embedding
+        embeddings = self.embedding_layer(x, training=training) # (batch, seq_len, d_model)
+
+        
         # 1. Input Embedding (Magnitude)
-        embeddings = self.input_dense(input_seq) # (batch, seq_len, d_model)
+        # embeddings = self.input_dense(input_seq) # (batch, seq_len, d_model)
         # embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype)) # Scaling often helps
 
-        # 2. Add Positional Encoding
-        pos_encoding = self.pos_encoding_layer(times)
-        embeddings += pos_encoding
-        # 3. Add Band Information (Segment Embedding)
-        if self.use_band_info and x.get('band_info') is not None:
-            band_info = x['band_info'] # (batch, seq_len, 1)
-            band_embeddings = self.band_dense(band_info)
-            embeddings += band_embeddings
-        # 4. Apply Dropout
-        embeddings = self.dropout(embeddings, training=training)
+        # 2. Apply Encoder (takes embeddings and mask)
+        # Pass training flag for dropout/LN in encoder
         enc_output = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
 
-        # 6. Pooling
-        # print(enc_output.shape, mask.shape)
-        pooled_output = self.pooling(enc_output,mask=tf.logical_not(tf.cast(mask, tf.bool))) # Pool only non-masked steps
+        # 3. Apply Pooling
+        # Invert mask for pooling (True where elements should be KEPT)
+        pool_mask = tf.logical_not(tf.cast(mask, tf.bool))
+        pooled_output = self.pooling(enc_output, mask=pool_mask) # (batch, d_model)
 
-        # 7. Optional Projection Head
-        if self.projection_head:
-            projected_output = self.projection_head(pooled_output, training=training)
-            return projected_output # Return projected output for loss calculation
-        else:
-            return pooled_output # Return pooled encoder output
+        # 4. Apply Projection Head (optional)
+        # Pass training flag if projection head had dropout/BN (currently doesn't, but good practice)
+        final_output = self.projection_head_layer(pooled_output, training=training) # (batch, projection_dim or d_model)
+
+        return final_output # Return the final output tensor
+
+
+
 
 @tf.function
 def train_step(model, anchor_batch, positive_batch, negative_batch, temperature, optimizer):
@@ -235,7 +212,7 @@ def train(model,
           use_custom_schedule=True,
           warmup_steps=4000,
           apply_white_noise=(False, True, True),
-          # noise_levels=(0.0, 0.1, 0.1), # Example noise levels
+          noise_levels=(0.0, 0.1, 0.1), # Example noise levels
           apply_binning=(False, False, True),
           apply_outlier=(False, False, True),
           maxlens=(200, 100, 200),
@@ -290,7 +267,7 @@ def train(model,
             seed=np.random.randint(1024), # Use different seed maybe?
             batch_size=batch_size,
             apply_white_noise=apply_white_noise,
-            # noise_levels=noise_levels,
+            noise_levels=noise_levels,
             apply_binning=apply_binning,
             apply_outlier=apply_outlier,
             maxlens=maxlens,
@@ -316,7 +293,7 @@ def train(model,
                 seed=np.random.randint(1024), # Use different seed maybe?
                 batch_size=batch_size,
                 apply_white_noise=apply_white_noise,
-                # noise_levels=noise_levels,
+                noise_levels=noise_levels,
                 apply_binning=apply_binning,
                 apply_outlier=apply_outlier,
                 maxlens=maxlens,

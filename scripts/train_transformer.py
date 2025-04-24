@@ -3,14 +3,34 @@ import tensorflow as tf
 import os
 import logging
 from dart.src.transformer import AstroTransformer, train
+from dart.bands.bands import ztf_band
 
-# path_to_read = "/media3/majumder/dataset/cepheids/val/"
+# try:
+#     import psutil
+#     physical_cores = psutil.cpu_count(logical=False)
+#     logical_cores = psutil.cpu_count(logical=True)
+#     print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
+# except ImportError:
+#     physical_cores = os.cpu_count() # Fallback, might be logical cores
+#     print("Install 'psutil' for accurate core counts.")
+#     print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
+
+# --- Configuration for CPU Parallelism ---
+
+# Set the number of threads for intra-operation parallelism
+# This controls parallelism within a single op (e.g., matrix multiplication)
+# num_intra_threads = physical_cores
+# tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
+
+# # Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
+# num_inter_threads = 0 # Let TF decide, or try a small number like 2
+# tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 def main():
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     # --- Main Execution ---
 
@@ -29,39 +49,50 @@ def main():
     maxlens = (400, 200, 400) # Sequence lengths for Anchor, Positive, Negative
     bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
     drop_rates = (0.0, 0.10, 0.60) # Fraction of bins/data to drop for binning/masking
+    noise_levels = (0.0, 0.01, 0.30) # Fraction of bins/data to drop for binning/masking
     path_to_read = "/media3/majumder/dataset/cepheids/train/" # Make sure this path is correct and mounted
     path_to_val = "/media3/majumder/dataset/cepheids/val/" # Make sure this path is correct and mounted
     path_to_save = "/media3/majumder/CL_results/" # Save path for model checkpoints
 
     # Model Parameters
     num_layers = 4 # Deeper model?
+    mjd = True # Use MJD for positional encoding
+    base = 10000.0
     d_model = 256 # Smaller embed dim?
     num_heads = 4
     dff = 1024 # Feed-forward dim
     rate = 0.1 # Dropout rate
     use_band_info = True
+    use_drop = True
     projection_dim = 128 # Add projection head (recommended for SimCLR)
 
     # Instantiate Model
     model = AstroTransformer(
         num_layers=num_layers,
         d_model=d_model,
+        base=base,
         num_heads=num_heads,
         dff=dff,
         rate=rate,
+        mjd=mjd,
+        use_drop=use_drop,
         use_band_info=use_band_info,
         projection_dim=projection_dim # Pass projection dim
     )
 
     # Dummy call to build the model (optional but good practice)
     # Need example input shapes - derive from maxlens
-    dummy_anchor_input = {
-        'input': tf.zeros((1, maxlens[0], 1), dtype=tf.float32),
-        'times': tf.zeros((1, maxlens[0], 1), dtype=tf.float32),
-        'band_info': tf.zeros((1, maxlens[0], 1), dtype=tf.float32),
-        'mask': tf.zeros((1, maxlens[0]), dtype=tf.float32) # Mask shape (batch, seq_len)
+    # --- Build the model with a dummy call (still recommended) ---
+    print("Building model with dummy input...")
+    # Use the expected sequence length AFTER sliding_window for the anchor view
+    build_seq_len = maxlens[0] * len(ztf_band) # e.g., 12 or 200 depending on strategy
+    dummy_input = {
+        'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
+        'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
+        'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
+        'mask': tf.zeros((1, build_seq_len), dtype=tf.float64) # Mask shape (batch, seq_len)
     }
-    _ = model(dummy_anchor_input)
+    _ = model(dummy_input,  training=False)
     model.summary()
 
 
@@ -79,7 +110,7 @@ def main():
                                                     use_custom_schedule=True, # Use AdamW with schedule
                                                     warmup_steps=4000, # Standard warmup
                                                     apply_white_noise=apply_white_noise,
-                                                    # noise_levels=noise_levels,
+                                                    noise_levels=noise_levels,
                                                     apply_binning=apply_binning,
                                                     apply_outlier=apply_outlier,
                                                     maxlens=maxlens,
