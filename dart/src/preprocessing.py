@@ -355,7 +355,7 @@ def augmentation(data,
     # Standardize the magnitude of the light curve 
     #
     new_mag, _ = standardize(mag, magerr)
-    input_seq['ori_mag'] = new_mag
+    # input_seq['ori_mag'] = new_mag
     #
     # Create the mask_serie
     #
@@ -401,87 +401,200 @@ def augmentation(data,
     input_seq['input'] = tf.expand_dims(new_input[:, 1], axis=-1)
     input_seq['times'] = tf.expand_dims(new_input[:, 0], axis=-1)
     input_seq['band_info'] = tf.expand_dims(new_input[:, 3], axis=-1)
-    input_seq['mask'] = tf.expand_dims(mask, axis=-1)
-    input_seq['last_index'] = input_dict['last_index']
-    input_seq['bands'] = input_dict['bands']
-    input_seq['id'] = input_dict['id']
-    input_seq['label'] = input_dict['label']
+    input_seq['mask'] = mask
+    # input_seq['last_index'] = input_dict['last_index']
+    # input_seq['bands'] = input_dict['bands']
+    # input_seq['id'] = input_dict['id']
+    # input_seq['label'] = input_dict['label']
     #
     return input_seq
 
-
-
 def contrastive_data_loader(source,
-                        seed=1024,
-                        batch_size=100,
-                        num_model=3,
-                        apply_white_noise=[False, True, True],
-                        apply_binning=[False, True, True],
-                        apply_outlier=[False, False, True],
-                        maxlen=[200, 100, 200],
-                        bin_width=[5, 5, 5],
-                        drop_data=[0.0, 0.20, 0.60]):
+                            seed=1024,
+                            batch_size=100,
+                            apply_white_noise=(False, True, True), # Use tuple
+                            # noise_levels=(0.0, 0.1, 0.2), # Separate noise levels
+                            apply_binning=(False, False, True), # Adjusted defaults based on user code
+                            apply_outlier=(False, False, True),
+                            maxlens=(200, 100, 200), # Use tuple
+                            bin_widths=(5, 5, 5), # Use tuple
+                            drop_rates=(0.0, 0.30, 0.60), # Use tuple, rename for clarity
+                            buffer_size=10000 # Shuffle buffer
+                           ):
+    """Creates a tf.data.Dataset yielding (anchor, positive, negative) batches."""
+    num_views = 3 # Anchor, Positive, Negative
 
-    """
-    Data loader with augmentation. This method build the input format for the model.
-    The augmented data is in the sequence: anchor, positive, negative.
+    # Basic validation
+    if not all(len(arg) == num_views for arg in [apply_white_noise, apply_binning, apply_outlier, maxlens, bin_widths, drop_rates]):
+         raise ValueError("Length of all augmentation parameter lists/tuples must match num_views (3).")
 
-    Parameters:
-    -----------------------------------------------------------------------------------
-        source (string): Record folder
-                         NOTE: source is of the format - /train/partition_{n}/{class}/chunk_{n}_{m}.record
-        seed (int): Random seed.
-        batch_size (int): Batch size
-        num_model (int): Number of models for contrastive learning. We have considered a triplet model.
-        apply_white_noise (list of bool): Whether to apply Gaussian noise to the magnitude. Provide values for each model.
-        apply_binning (list of bool): Whether to apply binning and random dropping of bins. Provide values for each model.
-        apply_outlier (list of bool): Whether to introduce photometric outliers. Provide values for each model.
-        maxlen (list of int): The maximum length of each band sequence after sliding window. Provide values for each model.
-        bin_width (list of int): The width of the bins for binning. Provide values for each model.
-        drop_data (list of float): The fraction of bins to drop during binning. Provide valie between 0 and 1. Provide values for each model.
+    # --- File Discovery using Glob Pattern ---
+    # Construct the specific glob pattern based on the user's structure
+    # source = /content/gdrive/My Drive/dart/val/
+    # pattern = source / partition_* / * / chunk_*.record
+    # The '*' will match any class directory name.
+    # The 'partition_*' will match any partition directory.
+    # The 'chunk_*.record' will match the chunk files ending in .record.
+    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    print(f"Searching for TFRecord files using pattern: {glob_pattern}")
+    # Use tf.data.Dataset.list_files to find matching files
+    # Keep shuffle=False here; we'll shuffle the dataset elements later
+    filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
+    # --- Check if files were found ---
+    num_files_found = tf.data.experimental.cardinality(filenames)
+    if num_files_found == 0:
+        raise ValueError(f"No TFRecord files found matching the pattern: {glob_pattern}\n"
+                         f"Please ensure the 'source' path ('{source}') is correct and files exist "
+                         f"in the expected 'partition_*/CLASS/chunk_*.record' structure.")
+    elif num_files_found == tf.data.UNKNOWN_CARDINALITY:
+         print("Warning: Could not determine the exact number of files found (UNKNOWN_CARDINALITY). Proceeding anyway.")
+         # Optionally, you could try iterating once to get a count, but it might be slow.
+    else:
+        print(f"Found {num_files_found} TFRecord files.")
+        # Optional: Print a few example filenames for verification
+        # print("Example filenames:")
+        # for f in filenames.take(5):
+        #     print(f"- {f.numpy().decode()}")
+    # --- End File Discovery and Check ---
 
-    Returns:
-    -----------------------------------------------------------------------------------
-        Tensorflow Dataset: Iterator with augmented batches. 
-    """
+    # Use interleave for better performance with multiple files
+    dataset = filenames.interleave(tf.data.TFRecordDataset, cycle_length=AUTO, num_parallel_calls=AUTO)
 
-    try:
-      if len(apply_white_noise) != num_model or len(apply_binning) != num_model or len(apply_outlier) != num_model or len(maxlen) != num_model or len(bin_width) != num_model or len(drop_data) != num_model:
-        raise ValueError(f"Please provide valid values for the parameters - 'apply_white_noise', 'apply_binning', 'apply_outlier', 'maxlen', 'bin_width', 'drop_data'."
-                          f"\nLength of each parameters should be equal to 'num_model'!\n")
-    except Exception as e:
-      print(e)
-      return None
+    # Apply shuffle early if desired (can be slow for very large datasets)
+    # dataset = dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
 
-    loaders = tuple()
-    filenames = list()
-    #
-    #
-    #
-    for root, _, files in os.walk(source):
-      for file_ in files:
-        filenames.append(os.path.join(root, file_))
-    #
-    #
-    #
-    dataset = tf.data.TFRecordDataset(filenames)
-    #
-    for i  in range(num_model):
-      #
-      #
-      #
-      loader = dataset.shuffle(buffer_size=10000, reshuffle_each_iteration=True, seed=seed).map(lambda data: augmentation(data,
-                                                                                                                            apply_white_noise=apply_white_noise[i],
-                                                                                                                            apply_binning=apply_binning[i],
-                                                                                                                            apply_outlier=apply_outlier[i],
-                                                                                                                            maxlen=maxlen[i],
-                                                                                                                            bin_width=bin_width[i],
-                                                                                                                            drop_data=drop_data[i]))
-      loaders += (loader, )
-    #
-    # Zip the dataset together
-    #
-    loaders = tf.data.Dataset.zip(loaders)
-    loaders = loaders.padded_batch(batch_size).cache().prefetch(buffer_size=AUTO)
-    #
-    return loaders
+    loaders = []
+    for i in range(num_views):
+        # Use lambda function with default arguments to capture loop variables correctly
+        aug_fn = lambda data, idx=i: augmentation(data,
+                                                   apply_white_noise=apply_white_noise[idx],
+                                                  #  noise_level=noise_levels[idx],
+                                                   apply_binning=apply_binning[idx],
+                                                   apply_outlier=apply_outlier[idx],
+                                                   maxlen=maxlens[idx],
+                                                   bin_width=bin_widths[idx],
+                                                   drop_data=drop_rates[idx])
+        view_loader = dataset.map(aug_fn, num_parallel_calls=AUTO)
+        loaders.append(view_loader)
+
+    # Zip the datasets for the different views
+    zipped_dataset = tf.data.Dataset.zip(tuple(loaders))
+
+    # Apply shuffle *after* zipping might be better if buffer_size is large
+    # and memory is a concern, but shuffling before mapping ensures more randomness
+    # across files earlier. Let's keep shuffle before mapping for now.
+    # If shuffling after:
+    zipped_dataset = zipped_dataset.shuffle(buffer_size=buffer_size // batch_size, seed=seed, reshuffle_each_iteration=True)
+
+
+    # Batch and Prefetch
+    # Use padded_batch ONLY if sequences within a batch can have different lengths AFTER augmentation
+    # If `get_window` ensures fixed length `maxlen`, `batch` is sufficient.
+    # Since positive view has different maxlen, padded_batch is needed if views aren't batched separately.
+    # However, we zip *before* batching, meaning anchor[i], positive[i], negative[i] come from the same original sample.
+    # The different maxlens mean AstroTransformer needs to handle variable input lengths, OR we need padding here.
+    # Let's assume AstroTransformer expects fixed input size based on maxlen *per view*.
+    # `padded_batch` seems necessary here because zipped_dataset yields tuples of dictionaries,
+    # and the 'input', 'times', 'band_info', 'mask' tensors inside the positive dict will have a different
+    # sequence length dimension than anchor/negative *before* batching.
+
+    # Define padding shapes and values carefully
+    # Example for one view's output structure (modify based on exact keys/dtypes)
+    # output_sig = loaders[0].element_spec # Get structure from one loader
+    # padding_values = {
+    #     'input': tf.constant(0, dtype=tf.float32),
+    #     'times': tf.constant(0, dtype=tf.float32),
+    #     'band_info': tf.constant(0, dtype=tf.float32),
+    #     'mask': tf.constant(1, dtype=tf.float32) # Pad mask with 1 (masked)
+    #     # Add other keys if they exist and need padding
+    # }
+    # Padded shapes: None allows variable batch size, -1 allows variable seq len (but we want fixed)
+    # This is tricky because maxlen varies per view. padded_batch pads all elements in the tuple
+    # to the *maximum* size found across the batch for that element's path.
+    # This might undesirably pad anchor/negative to positive's length or vice-versa if not handled carefully.
+
+    # --> Simpler approach: Ensure `get_window` *always* returns fixed `maxlen`.
+    # The current `get_window` already does this. So, `batch` should be sufficient.
+    final_loader = zipped_dataset.batch(batch_size)
+    final_loader = final_loader.cache() # Cache after batching if memory allows
+    final_loader = final_loader.prefetch(buffer_size=AUTO)
+
+    return final_loader
+
+
+
+
+# def contrastive_data_loader(source,
+#                         seed=1024,
+#                         batch_size=100,
+#                         num_model=3,
+#                         apply_white_noise=[False, True, True],
+#                         apply_binning=[False, True, True],
+#                         apply_outlier=[False, False, True],
+#                         maxlen=[200, 100, 200],
+#                         bin_width=[5, 5, 5],
+#                         drop_data=[0.0, 0.20, 0.60]):
+
+#     """
+#     Data loader with augmentation. This method build the input format for the model.
+#     The augmented data is in the sequence: anchor, positive, negative.
+
+#     Parameters:
+#     -----------------------------------------------------------------------------------
+#         source (string): Record folder
+                        #  NOTE: source is of the format - /train/partition_{n}/{class}/chunk_{n}_{m}.record
+#         seed (int): Random seed.
+#         batch_size (int): Batch size
+#         num_model (int): Number of models for contrastive learning. We have considered a triplet model.
+#         apply_white_noise (list of bool): Whether to apply Gaussian noise to the magnitude. Provide values for each model.
+#         apply_binning (list of bool): Whether to apply binning and random dropping of bins. Provide values for each model.
+#         apply_outlier (list of bool): Whether to introduce photometric outliers. Provide values for each model.
+#         maxlen (list of int): The maximum length of each band sequence after sliding window. Provide values for each model.
+#         bin_width (list of int): The width of the bins for binning. Provide values for each model.
+#         drop_data (list of float): The fraction of bins to drop during binning. Provide valie between 0 and 1. Provide values for each model.
+
+#     Returns:
+#     -----------------------------------------------------------------------------------
+#         Tensorflow Dataset: Iterator with augmented batches. 
+#     """
+
+#     try:
+#       if len(apply_white_noise) != num_model or len(apply_binning) != num_model or len(apply_outlier) != num_model or len(maxlen) != num_model or len(bin_width) != num_model or len(drop_data) != num_model:
+#         raise ValueError(f"Please provide valid values for the parameters - 'apply_white_noise', 'apply_binning', 'apply_outlier', 'maxlen', 'bin_width', 'drop_data'."
+#                           f"\nLength of each parameters should be equal to 'num_model'!\n")
+#     except Exception as e:
+#       print(e)
+#       return None
+
+#     loaders = tuple()
+#     filenames = list()
+#     #
+#     #
+#     #
+#     for root, _, files in os.walk(source):
+#       for file_ in files:
+#         filenames.append(os.path.join(root, file_))
+#     #
+#     #
+#     #
+#     dataset = tf.data.TFRecordDataset(filenames)
+#     #
+#     for i  in range(num_model):
+#       #
+#       #
+#       #
+#       loader = dataset.shuffle(buffer_size=10000, reshuffle_each_iteration=True, seed=seed).map(lambda data: augmentation(data,
+#                                                                                                                             apply_white_noise=apply_white_noise[i],
+#                                                                                                                             apply_binning=apply_binning[i],
+#                                                                                                                             apply_outlier=apply_outlier[i],
+#                                                                                                                             maxlen=maxlen[i],
+#                                                                                                                             bin_width=bin_width[i],
+#                                                                                                                             drop_data=drop_data[i]))
+#       loaders += (loader, )
+#     #
+#     # Zip the dataset together
+#     #
+#     loaders = tf.data.Dataset.zip(loaders)
+#     loaders = loaders.padded_batch(batch_size).cache().prefetch(buffer_size=AUTO)
+#     #
+#     return loaders
