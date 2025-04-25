@@ -37,22 +37,22 @@ def main():
     # Redefine parameters if needed (moved some defaults into train function)
     temperature = 0.01 # Often lower temperature works better
     patience = 10 # Adjust as needed
-    epochs = 5 # Train longer
+    epochs = 100 # Train longer
     # lr = 1e-4 # Use initial_lr in train function if not using schedule
     batch_size=200 # Adjust based on GPU memory
 
     # Aug parameters
     apply_white_noise = (False, True, True) # Anchor, Positive, Negative
     # noise_levels = (0.0, 0.1, 0.2) # Noise level for each view
-    apply_binning = (False, True, True) # Apply binning? (Masking based on time bins)
+    apply_binning = (False, False, True) # Apply binning? (Masking based on time bins)
     apply_outlier = (False, False, True) # Apply photometric outlier?
-    maxlens = (400, 200, 400) # Sequence lengths for Anchor, Positive, Negative
+    maxlens = (500, 250, 500) # Sequence lengths for Anchor, Positive, Negative
     bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
-    drop_rates = (0.0, 0.10, 0.60) # Fraction of bins/data to drop for binning/masking
-    noise_levels = (0.0, 0.01, 0.30) # Fraction of bins/data to drop for binning/masking
-    path_to_read = "/media3/majumder/dataset/cepheids/train/" # Make sure this path is correct and mounted
-    path_to_val = "/media3/majumder/dataset/cepheids/val/" # Make sure this path is correct and mounted
-    path_to_save = "/media3/majumder/CL_results/" # Save path for model checkpoints
+    drop_rates = (0.0, 0.0, 0.50) # Fraction of bins/data to drop for binning/masking
+    noise_levels = (0.0, 0.10, 0.10) # Fraction of bins/data to drop for binning/masking
+    path_to_read = "/media3/majumder/dataset/multi-class/train/" # Make sure this path is correct and mounted
+    path_to_val = "/media3/majumder/dataset/multi-class/val/" # Make sure this path is correct and mounted
+    path_to_save = "/media3/majumder/contrastive_loss_res/" # Save path for model checkpoints
 
     # Model Parameters
     num_layers = 4 # Deeper model?
@@ -94,6 +94,10 @@ def main():
     }
     _ = model(dummy_input,  training=False)
     model.summary()
+
+    # weights_path = "/media3/majumder/CL_results/run_20250425_085427/best_contrastive.weights.h5"
+    # model.load_weights(weights_path)
+    # print("Weights loaded successfully!")
 
 
     # Start Training

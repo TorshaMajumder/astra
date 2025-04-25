@@ -227,14 +227,14 @@ def train(model,
     best_weights_path = None
     summary_writer = None
 
-    if path_to_save:
-        if not os.path.isdir(path_to_save):
-             print(f"Warning: Save directory '{path_to_save}' does not exist. Attempting to create it.")
-             try:
-                 os.makedirs(path_to_save, exist_ok=True)
-             except OSError as e:
-                 print(f"Error: Could not create save directory '{path_to_save}'. {e}")
-                 path_to_save = None # Disable saving
+    # if path_to_save:
+    #     if not os.path.isdir(path_to_save):
+    #          print(f"Warning: Save directory '{path_to_save}' does not exist. Attempting to create it.")
+    #          try:
+    #              os.makedirs(path_to_save, exist_ok=True)
+    #          except OSError as e:
+    #              print(f"Error: Could not create save directory '{path_to_save}'. {e}")
+    #              path_to_save = None # Disable saving
     
     if path_to_save:
         # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
@@ -279,7 +279,7 @@ def train(model,
     except ValueError as e:
         print(f"Error creating data loader: {e}")
         traceback.print_exc()
-        return None # Return None if setup fails
+        return None , None# Return None if setup fails
 
     # Create data loader ONCE before the loop
     print("Setting up data loader for validation...")
@@ -305,7 +305,7 @@ def train(model,
         except ValueError as e:
             print(f"Error creating validation loader: {e}")
             traceback.print_exc()
-            valid_loader = None # Proceed without validation if loader fails
+            valid_loader = None, None # Proceed without validation if loader fails
 
      # --- End Data Loaders ---
     # Training Loop
@@ -340,7 +340,8 @@ def train(model,
             # Log step-wise loss to TensorBoard
             if summary_writer and global_step_train % 20 == 0: # Log less frequently
                 with summary_writer.as_default(step=global_step_train):
-                    tf.summary.scalar('train_loss_step', train_loss.numpy(), description="Training loss per step")
+                    tf.summary.scalar('loss/step_train', train_loss.numpy(), description="Training loss per step")
+                # summary_writer.flush()
             
             global_step_train += 1
 
@@ -369,7 +370,8 @@ def train(model,
                 # Log step-wise loss to TensorBoard (optional)
                 if summary_writer and global_step_val % 20 == 0:
                     with summary_writer.as_default(step=global_step_val):
-                         tf.summary.scalar('val_loss', val_loss.numpy())
+                         tf.summary.scalar('loss/step_val', val_loss.numpy())
+                    # summary_writer.flush()
                 global_step_val += 1
             
 
@@ -399,6 +401,8 @@ def train(model,
                      tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
+        
+       
 
         
         # --- Checkpointing and Early Stopping based on Validation Loss ---

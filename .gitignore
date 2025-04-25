@@ -74,3 +74,6 @@ ENV/
 ## Remove setup.py
 setup.py
 
+dart/utils/test.py
+dart/src/scheduler.py
+dart/src/prototype.py
