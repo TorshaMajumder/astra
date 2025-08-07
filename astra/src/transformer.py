@@ -10,13 +10,13 @@ import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras import layers
-from dart.src.encoder   import Encoder
-from dart.src.loss import nt_xent_loss_3views 
+from astra.src.encoder   import Encoder
+from astra.src.loss import nt_xent_loss_3views 
 from tensorflow.keras.optimizers import Adam
-from dart.src.embedding import TimeSeriesEmbedding
-from dart.src.header import ProjectionHead
-from dart.src.preprocessing import contrastive_data_loader
-from dart.src.scheduler import CustomSchedule, warmup_schedule
+from astra.src.embedding import TimeSeriesEmbedding
+from astra.src.header import ProjectionHead
+from astra.src.preprocessing import contrastive_data_loader
+from astra.src.scheduler import CustomSchedule, warmup_schedule
 
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings

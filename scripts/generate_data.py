@@ -8,9 +8,9 @@ import warnings
 import traceback
 from lsdb import read_hats
 from dask.distributed import Client
-from dart.bands.bands import ztf_band
-from dart.src.dataset import create_dataset
-from dart.utils.helper import generate_data_finetuning
+from astra.bands.bands import ztf_band
+from astra.src.dataset import create_dataset
+from astra.utils.helper import generate_data_finetuning
 
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
@@ -20,7 +20,7 @@ def main():
     #
     # Argument Parser
     #
-    parser = argparse.ArgumentParser(prog='dart-data',
+    parser = argparse.ArgumentParser(prog='astra-data',
                                     description="Generate data as tensorflow records")
     
     parser.add_argument('--target', default="../dataset/cepheids/", type=str,

@@ -2,8 +2,8 @@
 import tensorflow as tf
 import os
 import logging
-from dart.src.transformer import AstroTransformer, train
-from dart.bands.bands import ztf_band
+from astra.src.transformer import AstroTransformer, train
+from astra.bands.bands import ztf_band
 
 try:
     import psutil

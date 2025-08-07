@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]  # Specifies the build system requirements
 build-backend = "setuptools.build_meta" # Specifies the build backend
 
 [project]
-name = "dart" # Project name
+name = "astra" # Project name
 version = "1.0.0" # Placeholder or default version
 # Dynamic versioning is generally preferred.  See note below.
 
@@ -32,12 +32,12 @@ dependencies = [] # Initialize dependencies list
 Homepage = 'https://your-package-url.com' # Project URL
 
 [project.scripts]
-dart-data = "scripts.generate_data:main" # Entry point for dart-data
-dart-transformer = "scripts.training:main" # Entry point for dart-transformer
+astra-data = "scripts.generate_data:main" # Entry point for astra-data
+astra-transformer = "scripts.training:main" # Entry point for astra-transformer
 
 
 [tool.setuptools]
-packages = ["dart", "scripts"] # Explicitly list your packages.  find_packages() is default, but good to be explicit.
+packages = ["astra", "scripts"] # Explicitly list your packages.  find_packages() is default, but good to be explicit.
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION.txt"} # Dynamic version 

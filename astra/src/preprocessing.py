@@ -5,8 +5,8 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-from dart.utils.helper import standardize
-from dart.bands.bands import ztf_band, ztf_mag
+from astra.utils.helper import standardize
+from astra.bands.bands import ztf_band, ztf_mag
 
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
