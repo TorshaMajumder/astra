@@ -5,26 +5,26 @@ import logging
 from dart.src.transformer import AstroTransformer, train
 from dart.bands.bands import ztf_band
 
-# try:
-#     import psutil
-#     physical_cores = psutil.cpu_count(logical=False)
-#     logical_cores = psutil.cpu_count(logical=True)
-#     print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
-# except ImportError:
-#     physical_cores = os.cpu_count() # Fallback, might be logical cores
-#     print("Install 'psutil' for accurate core counts.")
-#     print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
+try:
+    import psutil
+    physical_cores = psutil.cpu_count(logical=False)
+    logical_cores = psutil.cpu_count(logical=True)
+    print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
+except ImportError:
+    physical_cores = os.cpu_count() # Fallback, might be logical cores
+    print("Install 'psutil' for accurate core counts.")
+    print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
 
 # --- Configuration for CPU Parallelism ---
 
 # Set the number of threads for intra-operation parallelism
 # This controls parallelism within a single op (e.g., matrix multiplication)
-# num_intra_threads = physical_cores
-# tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
+num_intra_threads = 20
+tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
 
-# # Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
-# num_inter_threads = 0 # Let TF decide, or try a small number like 2
-# tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
+# Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
+num_inter_threads = 0 # Let TF decide, or try a small number like 2
+tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
@@ -35,18 +35,18 @@ def main():
     # --- Main Execution ---
 
     # Redefine parameters if needed (moved some defaults into train function)
-    temperature = 0.01 # Often lower temperature works better
+    temperature = 0.1 # Often lower temperature works better
     patience = 10 # Adjust as needed
     epochs = 100 # Train longer
     # lr = 1e-4 # Use initial_lr in train function if not using schedule
-    batch_size=200 # Adjust based on GPU memory
+    batch_size=250 # Adjust based on GPU memory
 
     # Aug parameters
     apply_white_noise = (False, True, True) # Anchor, Positive, Negative
     # noise_levels = (0.0, 0.1, 0.2) # Noise level for each view
     apply_binning = (False, False, True) # Apply binning? (Masking based on time bins)
     apply_outlier = (False, False, True) # Apply photometric outlier?
-    maxlens = (500, 250, 500) # Sequence lengths for Anchor, Positive, Negative
+    maxlens = (200, 100, 200) # Sequence lengths for Anchor, Positive, Negative
     bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
     drop_rates = (0.0, 0.0, 0.50) # Fraction of bins/data to drop for binning/masking
     noise_levels = (0.0, 0.10, 0.10) # Fraction of bins/data to drop for binning/masking
