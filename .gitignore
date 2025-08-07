@@ -7,7 +7,6 @@
 # Dataset
 dataset/
 data/
-dart/
 
 # Notebooks
 
@@ -75,6 +74,6 @@ ENV/
 ## Remove setup.py
 setup.py
 
-dart/utils/test.py
-dart/src/scheduler.py
-dart/src/prototype.py
+astra/utils/test.py
+astra/src/scheduler.py
+astra/src/prototype.py
