@@ -75,5 +75,4 @@ ENV/
 setup.py
 
 astra/utils/test.py
-astra/src/scheduler.py
-astra/src/prototype.py
+
