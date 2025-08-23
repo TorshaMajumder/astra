@@ -1,6 +1,3 @@
-
-
-
 import os
 import logging
 import traceback
@@ -19,7 +16,7 @@ from astra.src.preprocessing import contrastive_data_loader
 from astra.src.scheduler import CustomSchedule, warmup_schedule
 
 
-logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
+logging.getLogger('tensorflow').setLevel(logging.ERROR)  
 os.system('clear')
 
 
@@ -30,63 +27,28 @@ class AstroTransformer(tf.keras.Model):
         super(AstroTransformer, self).__init__(name=name, **kwargs)
 
 
-
-        # self.mjd = mjd
-        # self.base = base
         self.d_model = d_model
-        # self.use_drop = use_drop
-        # self.use_band_info = use_band_info
-
         # 1. Instantiate Embedding Layer
         self.embedding_layer = TimeSeriesEmbedding(
                                                     d_model=d_model, base=base, rate=rate, # Pass shared rate
                                                     use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
                                                 )
 
-        # self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate, use_res, name='encoder')
-        
+        # 2. Instantiate Encoder Layer
         self.encoder = Encoder(
                                     num_layers=num_layers, d_model=d_model, num_heads=num_heads,
                                     dff=dff, rate=rate, use_res=use_res 
                                 )
-        # # Embedding layers
-        # self.input_dense = layers.Dense(d_model, name="input_embedding") # Embed magnitude feature
-        # self.pos_encoding_layer = self.build_positional_encoding() # Precompute or build layer
-
-        # if self.use_band_info:
-        #     # Embed band info (log frequency)
-        #     self.band_dense = layers.Dense(d_model, name="band_embedding")
-
-
-
-        # self.dropout = layers.Dropout(rate)
-        # self.encoder = Encoder(num_layers, d_model, num_heads, dff, rate, name='encoder')
+        # 3. Instantiate Pooling Layer
+        # Using Global Average Pooling as default
         self.pooling = layers.GlobalAveragePooling1D(name='avg_pooling')
 
         # 4. Instantiate Projection Head Layer
         self.projection_head_layer = ProjectionHead(
-                                                        d_model=d_model, # Pass d_model needed by the head's first layer
+                                                        d_model=d_model, 
                                                         projection_dim=projection_dim
                                                     )
 
-        # self.embedding = TimeSeriesEmbedding(d_model=d_model, base=base, rate=rate, use_band_info=use_band_info, use_drop=use_drop, mjd=mjd)
-
-        
-
-        # Encoder(num_layers=2, d_model=512, num_heads=4, dff=2048, rate=0.1, base=10000.0, use_res=True)
-        # self.decoder = ProjectionHead(1, name='ProjectionHead')
-        # self.dense = tf.keras.layers.Dense(d_model, activation='relu')
-        # self.dense1 = layers.Dense(d_model,activation=None)
-        # self.pooling = tf.keras.layers.GlobalAveragePooling1D()
-        # Alternative: Max Pooling/Attention-Based Pooling
-        # self.decoder = tf.keras.layers.Dense(1)
-        # Optional Projection Head (SimCLR style)
-        # self.projection_head = None
-        # if projection_dim:
-        #     self.projection_head = tf.keras.Sequential([
-        #         layers.Dense(d_model, activation='relu', name='projection1'), # Project back to d_model
-        #         layers.Dense(projection_dim, name='projection2') # Final projection dim
-        #     ], name='projection_head')
 
 
     
@@ -120,11 +82,6 @@ class AstroTransformer(tf.keras.Model):
         # Pass training flag for potential dropout in embedding
         embeddings = self.embedding_layer(x, training=training) # (batch, seq_len, d_model)
 
-        
-        # 1. Input Embedding (Magnitude)
-        # embeddings = self.input_dense(input_seq) # (batch, seq_len, d_model)
-        # embeddings *= tf.math.sqrt(tf.cast(self.d_model, embeddings.dtype)) # Scaling often helps
-
         # 2. Apply Encoder (takes embeddings and mask)
         # Pass training flag for dropout/LN in encoder
         enc_output = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
@@ -134,8 +91,8 @@ class AstroTransformer(tf.keras.Model):
         pool_mask = tf.logical_not(tf.cast(mask, tf.bool))
         pooled_output = self.pooling(enc_output, mask=pool_mask) # (batch, d_model)
 
-        # 4. Apply Projection Head (optional)
-        # Pass training flag if projection head had dropout/BN (currently doesn't, but good practice)
+        # 4. Apply Projection Head 
+        # Pass training flag if projection head had dropout/BN (currently doesn't)
         final_output = self.projection_head_layer(pooled_output, training=training) # (batch, projection_dim or d_model)
 
         return final_output # Return the final output tensor
@@ -149,17 +106,7 @@ def train_step(model, anchor_batch, positive_batch, negative_batch, temperature,
     batch_size = tf.shape(list(anchor_batch.values())[0])[0] # Get batch size from first tensor
 
     with tf.GradientTape() as tape:
-        # Get embeddings for anchor and positive views (used in loss)
-        # Pass training=True
-        # z_anchor = model(anchor_batch, training=True)   # (batch_size, proj_dim or d_model)
-        # z_positive = model(positive_batch, training=True) # (batch_size, proj_dim or d_model)
-
-        # # Get embedding for negative view (ensures encoder learns from it too, even if not in loss)
-        # # We detach gradients for this forward pass IF we don't want the negative example
-        # # characteristics to directly influence the gradient via the loss term.
-        # # However, since the weights are shared, computing it normally is fine and simpler.
-        # _ = model(negative_batch, training=True) # Compute but ignore output for loss
-
+        
         z_anchor = model(anchor_batch, training=True)   # (B, D)
         z_positive = model(positive_batch, training=True) # (B, D)
         z_negative = model(negative_batch, training=True) # (B, D)
@@ -169,7 +116,7 @@ def train_step(model, anchor_batch, positive_batch, negative_batch, temperature,
 
         # Handle potential NaN/Inf loss
         if tf.math.is_nan(loss) or tf.math.is_inf(loss):
-            tf.print("Warning: Loss is NaN or Inf. Setting loss to 0.0 for this step.", loss)
+            tf.print("\n\nWarning: Loss is NaN or Inf. Setting loss to 0.0 for this step.\n\n", loss)
             loss = tf.constant(0.0, dtype=tf.float32) # Use float32
 
     # Calculate and apply gradients
@@ -194,7 +141,7 @@ def validation_step(model, anchor_batch, positive_batch, negative_batch, tempera
 
     # Handle potential NaN/Inf loss
     if tf.math.is_nan(loss) or tf.math.is_inf(loss):
-        tf.print("Warning: Loss is NaN or Inf. Setting loss to 0.0 for this step.", loss)
+        tf.print("\n\nWarning: Loss is NaN or Inf. Setting loss to 0.0 for this step.\n\n", loss)
         loss = tf.constant(0.0, dtype=tf.float32) # Use float32
 
     return loss
@@ -223,34 +170,26 @@ def train(model,
 
     # --- Setup Paths and TensorBoard Writer ---
     run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_log_dir = None
     best_weights_path = None
     summary_writer = None
 
-    # if path_to_save:
-    #     if not os.path.isdir(path_to_save):
-    #          print(f"Warning: Save directory '{path_to_save}' does not exist. Attempting to create it.")
-    #          try:
-    #              os.makedirs(path_to_save, exist_ok=True)
-    #          except OSError as e:
-    #              print(f"Error: Could not create save directory '{path_to_save}'. {e}")
-    #              path_to_save = None # Disable saving
-    
     if path_to_save:
         # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
-        run_log_dir = os.path.join(path_to_save, f"run_{run_timestamp}")
-        os.makedirs(run_log_dir, exist_ok=True)
+        # run_log_dir = os.path.join(path_to_save, f"run_{run_timestamp}")
+        # os.makedirs(run_log_dir, exist_ok=True)
 
         weights_filename = 'best_contrastive.weights.h5' # Simpler name within run dir
-        best_weights_path = os.path.join(run_log_dir, weights_filename)
+        best_weights_path = os.path.join(path_to_save, weights_filename)
 
         # Create TensorBoard writer
-        summary_writer = tf.summary.create_file_writer(run_log_dir)
-        print(f"Run Directory (Weights & TensorBoard Logs): {run_log_dir}")
-        print(f"Will save best weights to: {best_weights_path}")
+        summary_writer = tf.summary.create_file_writer(path_to_save)
+        print(f"\n\nRun Directory (Weights & TensorBoard Logs): {path_to_save}")
+        print(f"\n\nWill save best weights to: {best_weights_path}")
 
     else:
         summary_writer = None # No logging if path_to_save is not provided
+
+    
 
     # Optimizer
     if use_custom_schedule:
@@ -264,7 +203,7 @@ def train(model,
     try:
         train_loader = contrastive_data_loader(
             source=path_to_read,
-            seed=np.random.randint(1024), # Use different seed maybe?
+            seed=np.random.randint(1024), 
             batch_size=batch_size,
             apply_white_noise=apply_white_noise,
             noise_levels=noise_levels,
@@ -275,16 +214,16 @@ def train(model,
             drop_rates=drop_rates,
             buffer_size=buffer_size
         )
-        print("Data loader ready.")
+        print("\n\nData loader ready.")
     except ValueError as e:
-        print(f"Error creating data loader: {e}")
+        print(f"\n\nError creating data loader: {e}")
         traceback.print_exc()
-        return None , None# Return None if setup fails
+        return None , None # Return None if setup fails
 
     # Create data loader ONCE before the loop
-    print("Setting up data loader for validation...")
+    print("\n\nSetting up data loader for validation...")
     if not path_to_val or not os.path.exists(path_to_val):
-         print("Warning: Validation path not provided or does not exist. Skipping validation.")
+         print("\n\nWarning: Validation path not provided or does not exist. Skipping validation.")
          valid_loader = None
     else:
         try:
@@ -301,9 +240,9 @@ def train(model,
                 drop_rates=drop_rates,
                 buffer_size=max(buffer_size // 4, 10) # Smaller buffer for validation
             )
-            print("Validation loader ready.")
+            print("\n\nValidation loader ready.")
         except ValueError as e:
-            print(f"Error creating validation loader: {e}")
+            print(f"\n\nError creating validation loader: {e}")
             traceback.print_exc()
             valid_loader = None, None # Proceed without validation if loader fails
 
@@ -313,8 +252,7 @@ def train(model,
     es_count = 0
     epoch_wise_train_loss = []
     epoch_wise_val_loss = []
-    # best_weights_path = None
-    print(f"Starting training run: {run_timestamp} for {epochs} epochs...")
+    print(f"\n\nStarting training run: {run_timestamp} for {epochs} epochs...")
     global_step_train = 0 # Separate step counters
     global_step_val = 0
 
@@ -325,20 +263,19 @@ def train(model,
         model.trainable = True # Ensure model is trainable
         
         pbar_train = tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}', leave=False)
-        # pbar = tqdm(enumerate(train_loader), total=?) # If you know steps per epoch
-
+        
         for step, (anchor, positive, negative) in enumerate(pbar_train):
             try:
                 train_loss = train_step(model, anchor, positive, negative, temperature, optimizer)
                 step_wise_train_loss.append(train_loss.numpy()) # Get numpy value
-                # train_loss_step = train_loss.numpy() # Get loss for current step
+                
             except Exception as e:
-                 print(f"\nError during train_step (Epoch {epoch+1}, Step {step}): {e}")
+                 print(f"\n\nError during train_step (Epoch {epoch+1}, Step {step}): {e}")
                  # Decide how to handle: continue, break, etc.
                  continue # Skip batch
 
             # Log step-wise loss to TensorBoard
-            if summary_writer and global_step_train % 20 == 0: # Log less frequently
+            if summary_writer and global_step_train % 1 == 0: # Log less frequently
                 with summary_writer.as_default(step=global_step_train):
                     tf.summary.scalar('loss/step_train', train_loss.numpy(), description="Training loss per step")
                 # summary_writer.flush()
@@ -346,7 +283,7 @@ def train(model,
             global_step_train += 1
 
             # Update progress bar description
-            if step % 20 == 0:
+            if step % 1 == 0:
                 # current_lr = optimizer.lr(optimizer.iterations).numpy() if hasattr(optimizer.lr, '__call__') else optimizer.lr.numpy()
                 current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
                 pbar_train.set_postfix({'Train Loss': f'{train_loss.numpy():.4f}', 'LR': f'{current_lr:.1E}'})
@@ -362,13 +299,13 @@ def train(model,
                 try:
                     val_loss = validation_step(model, anchor, positive, negative, temperature)
                     step_wise_val_loss.append(val_loss.numpy()) # Get numpy value
-                    # val_loss_step = val_loss.numpy() # Get loss for current step
+                    
                 except Exception as e:
-                    print(f"\nError during validation_step (Epoch {epoch+1}, Step {step}): {e}")
+                    print(f"\n\nError during validation_step (Epoch {epoch+1}, Step {step}): {e}")
                     continue # Skip batch
 
                 # Log step-wise loss to TensorBoard (optional)
-                if summary_writer and global_step_val % 20 == 0:
+                if summary_writer and global_step_val % 1 == 0:
                     with summary_writer.as_default(step=global_step_val):
                          tf.summary.scalar('loss/step_val', val_loss.numpy())
                     # summary_writer.flush()
@@ -436,7 +373,7 @@ def train(model,
                 print("  Loss is inf/nan or validation unavailable, skipping early stopping count.")
 
         if es_count >= patience:
-            print(f'\n[INFO] Early Stopping Triggered after {epoch + 1} epochs.')
+            print(f'\n\n[INFO] Early Stopping Triggered after {epoch + 1} epochs.')
             break
     
     if summary_writer:
@@ -445,9 +382,9 @@ def train(model,
     print("Training finished.")
 
     if best_weights_path and os.path.exists(best_weights_path):
-         print(f"Best weights saved at: {best_weights_path} (Best Val Loss: {best_val_loss:.5f})")
+         print(f"\n\nBest weights saved at: {best_weights_path} (Best Val Loss: {best_val_loss:.5f})")
     elif path_to_save:
-         print("No weights were saved (either no improvement found or path issue).")
+         print("\n\nNo weights were saved (either no improvement found or path issue).")
 
     return epoch_wise_train_loss, epoch_wise_val_loss # Return both histories
 

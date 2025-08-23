@@ -74,5 +74,5 @@ ENV/
 ## Remove setup.py
 setup.py
 
-astra/utils/test.py
+# astra/utils/test.py
 
