@@ -515,3 +515,142 @@ def contrastive_data_loader(source,
 
 
 
+
+# Ensure your other data functions are defined:
+# deserialize, standardize, sliding_window, get_window, ztf_band
+
+def create_inference_loader(source,
+                            batch_size,
+                            maxlen, # The fixed sequence length the encoder expects
+                            shuffle=False, # Shuffling is not needed for inference/evaluation
+                            seed=None):
+    """
+    Creates a tf.data.Dataset for inference/evaluation.
+
+    This loader reads TFRecords, applies basic preprocessing (standardization,
+    fixed-length formatting), and yields batches of dictionaries containing
+    both the model inputs and the associated metadata (IDs, labels).
+
+    Args:
+        source (str): Path to the directory containing TFRecord files.
+        batch_size (int): The batch size for inference.
+        maxlen (int): The target fixed sequence length for the model input,
+                      matching the anchor view length from pre-training.
+        shuffle (bool): Whether to shuffle the dataset. Defaults to False.
+        seed (int): Random seed for shuffling if enabled.
+
+    Returns:
+        tf.data.Dataset: A dataset yielding batches of dictionaries.
+    """
+
+    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    print(f"Searching for inference files using pattern: {glob_pattern}")
+    filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
+
+    num_files_found = tf.data.experimental.cardinality(filenames_dataset)
+    if num_files_found == 0:
+        raise ValueError(f"No TFRecord files found for inference matching pattern: {glob_pattern}")
+    elif num_files_found != tf.data.UNKNOWN_CARDINALITY:
+         print(f"Found {num_files_found} inference files.")
+
+    dataset = filenames_dataset.interleave(
+        tf.data.TFRecordDataset,
+        cycle_length=AUTO,
+        num_parallel_calls=AUTO
+    )
+
+    # --- Mapping Function for Inference ---
+    def preprocess_for_inference(data):
+        input_dict = deserialize(data)
+        # input_dict = deserialize(data)
+        mags = input_dict['input_id'][:,1]
+        magerrs = input_dict['input_id'][:,2]
+        # features = input_dict['input_features']
+        # mags = features[:, 1]
+        # magerrs = features[:, 2]
+
+        # 1. Standardize Magnitude (same way as during training)
+        std_mags, _ = standardize(mags, magerrs)
+
+        # 2. Reconstruct features with the standardized magnitude
+        # processed_features = tf.stack([
+        #     input_dict['input_id'][:, 0], # time
+        #     std_mags,       # standardized magnitude
+        #     input_dict['input_id'][:, 2:], # magerr & band_info
+        # ], axis=1)
+        processed_features = tf.concat([
+                            input_dict['input_id'][:, 0:1], #mjd
+                            tf.reshape(std_mags, (-1,1)),
+                            input_dict['input_id'][:, 2:] #magerr and band_sorted
+                          ], axis=1)
+
+        # --- THIS IS THE KEY CHANGE ---
+        # 3. Apply Padding/Cropping to the fixed `maxlen`.
+        # Create a zero mask for the original length.
+        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float64)
+        num_cols = tf.shape(processed_features)[1]
+
+        # Use get_window to enforce the fixed length.
+        final_features, final_mask = get_window(
+            processed_features,
+            initial_mask,
+            maxlen, # The target length (e.g., 2000)
+            num_cols
+        )
+        # --- END OF KEY CHANGE ---
+
+        # 3. Create the attention mask. It's all zeros (no masking) for now,
+        # as padding will be handled by padded_batch later.
+        # mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
+
+        
+        # 4. Prepare output dictionary with variable-length tensors
+        output_dict = {}
+        output_dict['input'] = tf.expand_dims(final_features[:, 1], axis=-1)
+        output_dict['times'] = tf.expand_dims(final_features[:, 0], axis=-1)
+        output_dict['band_info'] = tf.expand_dims(final_features[:, 3], axis=-1)
+        output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) # Mask is also variable length
+        output_dict['id'] = input_dict['id']
+        output_dict['label'] = input_dict['label']
+
+        return output_dict
+    # --- End Mapping Function ---
+
+    processed_dataset = dataset.map(preprocess_for_inference, num_parallel_calls=AUTO)
+
+    # --- Use padded_batch to handle variable lengths ---
+    # Define the shapes to pad to. `None` in a dimension means it's variable
+    # and will be padded to the maximum length of that dimension in each batch.
+    # padded_shapes = {
+    #     'input': tf.TensorShape([None, 1]),
+    #     'times': tf.TensorShape([None, 1]),
+    #     'band_info': tf.TensorShape([None, 1]),
+    #     'mask': tf.TensorShape([None]),
+    #     'id': tf.TensorShape([]),       # Scalar, no padding needed
+    #     'label': tf.TensorShape([])   # Scalar, no padding needed
+    # }
+
+    # # Define the values to use for padding.
+    # padding_values = {
+    #     'input': tf.constant(0.0, dtype=tf.float32),
+    #     'times': tf.constant(0.0, dtype=tf.float32),
+    #     'band_info': tf.constant(0.0, dtype=tf.float32),
+    #     'mask': tf.constant(1.0, dtype=tf.float32), # <-- CRUCIAL: Pad the mask with 1s
+    #     'id': tf.constant(0, dtype=tf.int64),
+    #     'label': tf.constant("", dtype=tf.string)
+    # }
+
+    # Apply padded_batch
+    final_loader = processed_dataset.batch(
+        batch_size
+    )
+
+    # Prefetch to overlap data loading with model execution
+    final_loader = final_loader.prefetch(buffer_size=AUTO)
+
+    print("Inference data loader setup complete (using padded_batch for variable length).")
+    return final_loader
+
+
+
+

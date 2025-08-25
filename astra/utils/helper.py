@@ -2,8 +2,11 @@
 # Import all dependencies
 #
 import os
+import json
 import numpy as np
 import tensorflow as tf
+from tensorboard.backend.event_processing import event_accumulator
+
 
 @tf.function
 def standardize(x, err):
@@ -129,6 +132,86 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
     #
     if writer is not None:
         writer.close()
+
+
+
+
+
+def load_hparams_from_event_file(run_directory):
+    """
+    Loads hyperparameters from a text summary in a TensorBoard event file.
+
+    Args:
+        run_directory (str): The path to the specific run directory
+                             (e.g., '/path/to/run_YYYYMMDD_HHMMSS/').
+
+    Returns:
+        tuple: A tuple containing (model_params, training_params, data_params)
+               dictionaries, or (None, None, None) if the data is not found.
+    """
+    print(f"Searching for hyperparameters in event file in: {run_directory}")
+    
+    try:
+        # Initialize EventAccumulator to load text summaries (Tensors)
+        ea = event_accumulator.EventAccumulator(
+            run_directory,
+            size_guidance={
+                # Text summaries are often stored as Tensors
+                event_accumulator.TENSORS: 10,
+            }
+        )
+        ea.Reload()
+
+        # The tag for hyperparameters was 'hyperparameters'
+        hparam_tag = 'hyperparameters'
+        
+        # Check if the tag exists in the 'tensors' category, as text is stored there
+        if hparam_tag not in ea.Tags()['tensors']:
+            print(f"ERROR: Hyperparameter tag '{hparam_tag}' not found in the 'tensors' category of the event file.")
+            print("Available tensor tags:", ea.Tags()['tensors'])
+            return None, None, None
+
+        # Retrieve the tensor event
+        hparam_event = ea.Tensors(hparam_tag)[0] # Get the first (and likely only) event
+        
+        # The text is stored in the tensor_proto as a byte string
+        # Convert the tensor proto to a numpy array, which will be an array of bytes
+        hparam_bytes = tf.make_ndarray(hparam_event.tensor_proto).item()
+        
+        # Decode the byte string to a regular string
+        hparam_string = hparam_bytes.decode('utf-8')
+        
+        # The string was saved with <pre> tags, remove them
+        if hparam_string.startswith('<pre>'):
+            hparam_string = hparam_string.replace('<pre>', '').replace('</pre>', '')
+            
+        # Parse the JSON string to get the dictionary
+        log_data = json.loads(hparam_string)
+        
+        # Extract the specific parameter dictionaries
+        hparams = log_data.get('hyperparameters', log_data) # Handle both nested/non-nested cases
+        model_params = hparams.get('model_params', {})
+        training_params = hparams.get('training_params', {})
+        data_params = hparams.get('data_params', {})
+        
+        if not model_params or not data_params:
+            print("ERROR: Parsed hyperparameters are missing 'model_params' or 'data_params' section.")
+            return None, None, None
+
+        print("Hyperparameters loaded successfully from event file.")
+        return model_params, training_params, data_params
+
+    except FileNotFoundError:
+        print(f"ERROR: Log directory not found: {run_directory}")
+        return None, None, None
+    except IndexError:
+         print(f"ERROR: Hyperparameter tag '{hparam_tag}' was found, but no event data was associated with it.")
+         return None, None, None
+    except Exception as e:
+        print(f"An unexpected error occurred while loading hparams: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None, None
 
     
 
