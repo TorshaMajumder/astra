@@ -5,7 +5,7 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-from astra.utils.helper import standardize
+from astra.utils.helper import standardize, sequence_window
 from astra.bands.bands import ztf_band, ztf_mag
 
 
@@ -283,7 +283,7 @@ def deserialize(sample):
                         'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
 
     for i in range(num_keys):
-        sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
+        sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float64)
 
     context, sequence = tf.io.parse_single_sequence_example(
                             serialized=sample,
@@ -589,13 +589,14 @@ def create_inference_loader(source,
         # Create a zero mask for the original length.
         initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float64)
         num_cols = tf.shape(processed_features)[1]
-
+        # sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
         # Use get_window to enforce the fixed length.
-        final_features, final_mask = get_window(
+        final_features, final_mask = sequence_window(
             processed_features,
             initial_mask,
-            maxlen, # The target length (e.g., 2000)
-            num_cols
+            input_dict['last_index'], 
+            input_dict['bands'], 
+            maxlen
         )
         # --- END OF KEY CHANGE ---
 

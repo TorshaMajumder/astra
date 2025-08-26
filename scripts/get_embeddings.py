@@ -55,7 +55,8 @@ print("   Model instantiated.")
 # Use the sequence length that the ANCHOR view had during training
 # Example: maxlens=(100, 50, 100), ztf_band has 3 bands
 # build_seq_len = 100 * 3 = 300
-build_seq_len = 300 # <--- IMPORTANT: SET THIS TO YOUR ANCHOR'S SEQ LENGTH
+max_len = {'g': 400, 'r': 500, 'i': 100} # <--- IMPORTANT: SET THIS TO YOUR ANCHOR'S MAXLENS
+build_seq_len = sum(max_len.values()) # <--- IMPORTANT: SET THIS TO YOUR ANCHOR'S SEQ LENGTH
 dummy_input = {
     'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
     'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
@@ -146,7 +147,7 @@ inference_batch_size = 300 # Can be larger than training batch size
 inference_loader = create_inference_loader(
     source=path_to_inference_data,
     batch_size=inference_batch_size,
-    maxlen=build_seq_len
+    maxlen=max_len
 )
 
 # --- Step 6: Generate and Collect Embeddings ---
@@ -161,7 +162,7 @@ for batch_data in tqdm(inference_loader, desc="Generating Embeddings"):
     # The encoder model expects a dictionary of tensors
     # The loader already provides this format
     print(batch_data['input'].shape, batch_data['times'].shape, batch_data['band_info'].shape, batch_data['mask'].shape)
-    
+    exit()
     model_inputs = {
         'input': batch_data['input'],
         'times': batch_data['times'],

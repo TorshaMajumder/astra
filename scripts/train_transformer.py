@@ -39,7 +39,7 @@ def main():
     # Redefine parameters if needed (moved some defaults into train function)
     temperature = 0.1 # Often lower temperature works better
     patience = 100 # Adjust as needed
-    epochs = 10 # Train longer
+    epochs = 20 # Train longer
     # lr = 1e-4 # Use initial_lr in train function if not using schedule
     batch_size=300 # Adjust based on GPU memory
 
