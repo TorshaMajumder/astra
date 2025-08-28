@@ -20,8 +20,8 @@ METRIC = 'cosine'     # Distance metric. 'cosine' is often excellent for high-di
 RANDOM_STATE = 42     # Set for reproducible UMAP results.
 
 # Plotting parameters
-POINT_SIZE = 50
-ALPHA = 0.4       # Point transparency, useful for dense plots.
+POINT_SIZE = 100
+ALPHA = 0.7   # Point transparency, useful for dense plots.
 
 # --- 2. Load the Saved Embeddings and Metadata ---
 
@@ -95,7 +95,7 @@ df = pd.DataFrame()
 df['label'] = labels_mapped
 df['umap-one'] = embedding_2d[:, 0]
 df['umap-two'] = embedding_2d[:, 1]
-
+plot_order = ['RRLY', 'CEP']
 
 # --- 5. Create and Save the Plot ---
 
@@ -109,7 +109,8 @@ plt.figure(figsize=(16, 12))
 scatter_plot = sns.scatterplot(
     x="umap-one", y="umap-two",
     hue="label",         # This tells Seaborn to color points by their label
-    palette=sns.color_palette("hsv", len(np.unique(labels_mapped))), # Use a nice color palette
+    hue_order=plot_order,
+    palette=sns.color_palette("tab10", len(np.unique(labels_mapped))), # Use a nice color palette
     data=df,
     legend="full",
     alpha=ALPHA,

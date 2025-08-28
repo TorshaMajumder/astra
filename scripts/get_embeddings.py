@@ -12,7 +12,7 @@ from astra.src.encoder import Encoder
 
 
 
-run_directory = "/media3/majumder/contrastive_loss_res/run_20250824_064043/" # <--- SET THIS PATH
+run_directory = "/media3/majumder/contrastive_loss_res/run_20250825_214016/" # <--- SET THIS PATH
 
 model_params, training_params, data_params = load_hparams_from_event_file(run_directory)
 
@@ -67,8 +67,7 @@ _ = model(dummy_input, training=False)
 print("   Full model built.")
 
 # Path to your saved weights file
-weights_path = "/media3/majumder/contrastive_loss_res/run_20250824_064043/best_contrastive.weights.h5" # <--- SET THIS PATH
-
+weights_path = "/media3/majumder/contrastive_loss_res/run_20250825_214016/best_contrastive.weights.h5" # <--- SET THIS PATH
 print(f"\n2. Loading pre-trained weights from: {weights_path}")
 try:
     model.load_weights(weights_path)
@@ -162,7 +161,7 @@ for batch_data in tqdm(inference_loader, desc="Generating Embeddings"):
     # The encoder model expects a dictionary of tensors
     # The loader already provides this format
     print(batch_data['input'].shape, batch_data['times'].shape, batch_data['band_info'].shape, batch_data['mask'].shape)
-    exit()
+    
     model_inputs = {
         'input': batch_data['input'],
         'times': batch_data['times'],

@@ -1,4 +1,5 @@
 import os
+import datetime # Import datetime
 import tensorflow as tf
 
 # --- Main Fine-tuning Script ---
@@ -7,7 +8,13 @@ import tensorflow as tf
 # --- Paths and HParams ---
 run_directory = "/path/to/your/pre-trained/run_YYYYMMDD_HHMMSS/"
 path_to_labeled_data = "/path/to/your/labeled_data_tfrecords/"
-path_to_save_finetuned_model = "/path/to/save/finetuned_models/"
+# path_to_save_finetuned_model = "/path/to/save/finetuned_models/"
+
+if run_directory:
+        # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
+        finetune_dir = os.path.join(run_directory, f"finetune_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        os.makedirs(finetune_dir, exist_ok=True)
+        print(f"\n\n {finetune_dir} is created.\n")
 
 # Fine-tuning HParams
 FINETUNE_LR = 1e-5 # CRITICAL: Use a very small learning rate

@@ -75,7 +75,7 @@ from matplotlib import pyplot as plt
 # --- Configuration ---
 # Path to the specific run directory containing the event file(s)
 # Example: run_log_dir = "/media3/majumder/CL_results/run_20231028_153000/"
-run_log_dir = "/media3/majumder/contrastive_loss_res/run_20250823_155327/" # <--- SET THIS PATH
+run_log_dir = "/media3/majumder/contrastive_loss_res/run_20250826_222245/" # <--- SET THIS PATH
 
 
 
@@ -141,15 +141,15 @@ try:
             print(f"Step {step}: {param}")
 
 
-    # # --- Extract Data using the function ---
-    # print(f"\nAttempting to read tags from 'tensors' category...")
-    # train_loss_data = extract_tensor_data(ea, train_loss_tag)
-    # if train_loss_data:
-    #      print(f"Found {len(train_loss_data)} training loss points (tag: {train_loss_tag}) from tensors.")
+    # --- Extract Data using the function ---
+    print(f"\nAttempting to read tags from 'tensors' category...")
+    train_loss_data = extract_tensor_data(ea, train_loss_tag)
+    if train_loss_data:
+         print(f"Found {len(train_loss_data)} training loss points (tag: {train_loss_tag}) from tensors.")
 
-    # val_loss_data = extract_tensor_data(ea, val_loss_tag)
-    # if val_loss_data:
-    #      print(f"Found {len(val_loss_data)} validation loss points (tag: {val_loss_tag}) from tensors.")
+    val_loss_data = extract_tensor_data(ea, val_loss_tag)
+    if val_loss_data:
+         print(f"Found {len(val_loss_data)} validation loss points (tag: {val_loss_tag}) from tensors.")
 
 
     # # --- Display or Process Data ---
@@ -175,32 +175,32 @@ try:
     # #         print(f"Epoch {epoch_idx+1}: Train Loss = {train_l_str}, Val Loss = {val_l_str}")
 
 
-    # # Option 2: Create a Pandas DataFrame
-    # if train_loss_data or val_loss_data:
-    #     # Get unique steps (epochs) from both lists
-    #     all_steps = sorted(list(set([e[0] for e in train_loss_data] + [e[0] for e in val_loss_data])))
+    # Option 2: Create a Pandas DataFrame
+    if train_loss_data or val_loss_data:
+        # Get unique steps (epochs) from both lists
+        all_steps = sorted(list(set([e[0] for e in train_loss_data] + [e[0] for e in val_loss_data])))
 
-    #     train_losses_dict = {e[0]: e[1] for e in train_loss_data}
-    #     val_losses_dict = {e[0]: e[1] for e in val_loss_data}
+        train_losses_dict = {e[0]: e[1] for e in train_loss_data}
+        val_losses_dict = {e[0]: e[1] for e in val_loss_data}
 
-    #     df_data = {
-    #         'epoch': [s + 1 for s in all_steps], # Convert step (0-based) to epoch number (1-based)
-    #         'train_loss': [train_losses_dict.get(s, None) for s in all_steps],
-    #         'val_loss': [val_losses_dict.get(s, None) for s in all_steps]
-    #     }
-    #     loss_df = pd.DataFrame(df_data).set_index('epoch')
-    #     loss_df.to_csv(os.path.join(run_log_dir, 'epoch_losses.csv'), index=True)
-    #     print("\n--- DataFrame Summary ---")
-    #     # print(loss_df)
-    #     plt.plot(loss_df.index, loss_df['train_loss'], label='Train Loss', color='blue')
-    #     plt.plot(loss_df.index, loss_df['val_loss'], label='Validation Loss', color='orange')
-    #     plt.xlabel('Epoch')
-    #     plt.ylabel('Loss')
-    #     plt.title('Epoch Losses')
-    #     plt.legend()
-    #     # plt.grid()
-    #     # plt.savefig(os.path.join(run_log_dir, 'epoch_losses.png'))
-    #     plt.show()
+        df_data = {
+            'epoch': [s + 1 for s in all_steps], # Convert step (0-based) to epoch number (1-based)
+            'train_loss': [train_losses_dict.get(s, None) for s in all_steps],
+            'val_loss': [val_losses_dict.get(s, None) for s in all_steps]
+        }
+        loss_df = pd.DataFrame(df_data).set_index('epoch')
+        loss_df.to_csv(os.path.join(run_log_dir, 'epoch_losses.csv'), index=True)
+        print("\n--- DataFrame Summary ---")
+        # print(loss_df)
+        plt.plot(loss_df.index, loss_df['train_loss'], label='Train Loss', color='blue')
+        plt.plot(loss_df.index, loss_df['val_loss'], label='Validation Loss', color='orange')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Epoch Losses')
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join(run_log_dir, 'epoch_losses.png'))
+        plt.show()
 
 
 except FileNotFoundError:

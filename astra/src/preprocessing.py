@@ -5,7 +5,7 @@ import itertools
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-from astra.utils.helper import standardize, sequence_window
+from astra.utils.helper import standardize
 from astra.bands.bands import ztf_band, ztf_mag
 
 
@@ -101,14 +101,14 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
           #
           current_serie = sequence[idx:last_index[index_in_bands] + 1]
           mask_serie = mask[idx:last_index[index_in_bands] + 1]
-          current_serie, mask_serie = get_window(current_serie, mask_serie, max_len, num_cols)
+          current_serie, mask_serie = get_window(current_serie, mask_serie, max_len[fil], num_cols)
           #
           # Move to the next band in the sequence
           #
           idx = last_index[index_in_bands] + 1
       else:
-          current_serie = tf.zeros((max_len, num_cols), dtype=sequence.dtype)
-          mask_serie = tf.ones(max_len, dtype=mask.dtype)
+          current_serie = tf.zeros((max_len[fil], num_cols), dtype=sequence.dtype)
+          mask_serie = tf.ones(max_len[fil], dtype=mask.dtype)
       #
       series.append(current_serie)
       mask_series.append(mask_serie)
@@ -281,9 +281,9 @@ def deserialize(sample):
                         'bands': tf.io.VarLenFeature(dtype=tf.string),
                         'last_index': tf.io.VarLenFeature(dtype=tf.int64),
                         'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
-
+    # TypeError: Value passed to parameter 'feature_list_sparse_types' has DataType float64 not in list of allowed values: float32, int64, string
     for i in range(num_keys):
-        sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float64)
+        sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
 
     context, sequence = tf.io.parse_single_sequence_example(
                             serialized=sample,
@@ -591,7 +591,7 @@ def create_inference_loader(source,
         num_cols = tf.shape(processed_features)[1]
         # sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
         # Use get_window to enforce the fixed length.
-        final_features, final_mask = sequence_window(
+        final_features, final_mask = sliding_window(
             processed_features,
             initial_mask,
             input_dict['last_index'], 
