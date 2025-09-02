@@ -12,7 +12,7 @@ from astra.src.encoder import Encoder
 
 
 
-run_directory = "/media3/majumder/contrastive_loss_res/run_20250825_214016/" # <--- SET THIS PATH
+run_directory = "/media3/majumder/contrastive_loss_res/run_20250826_222245/" # <--- SET THIS PATH
 
 model_params, training_params, data_params = load_hparams_from_event_file(run_directory)
 

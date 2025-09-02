@@ -56,10 +56,16 @@ def create_finetune_loader(source_dir,
         # ... (standardize magnitude, reconstruct features) ...
         features = input_dict['input_features']
         mags, magerrs = features[:, 1], features[:, 2]
-        std_mags, _ = standardize(mags, magerrs)
-        processed_features = tf.stack([features[:, 0], std_mags, features[:, 2], features[:, 3]], axis=1)
-        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
+        new_mag, _ = standardize(mags, magerrs)
+        initial_mask = tf.zeros(tf.shape(new_mag)[0], dtype=tf.float32)
+        if apply_white_noise:
+            #
+            new_mag = gaussian_noise(new_mag, noise_level)
+        
+        processed_features = tf.stack([features[:, 0], new_mag, features[:, 2], features[:, 3]], axis=1)
+        
         num_cols = tf.shape(processed_features)[1]
+        
         final_features, final_mask = get_window(processed_features, initial_mask, maxlen, num_cols)
 
         # Prepare model inputs dictionary

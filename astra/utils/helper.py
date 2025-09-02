@@ -67,21 +67,23 @@ def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100,
     object_count = 0
     filenames = list()
     weighted_mean = list()
-    #
-    # Create the finetuning directory if it doesn't exist
-    #
-    os.makedirs(os.path.join(path_to_store, "finetuning"), exist_ok=True)
-    #
-    #
-    for root, _, files in os.walk(path_to_read):
-      for file_ in files:
-        filenames.append(os.path.join(root, file_))
 
+    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    print(f"Searching for inference files using pattern: {glob_pattern}")
+    filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
+
+    num_files_found = tf.data.experimental.cardinality(filenames_dataset)
+    if num_files_found == 0:
+        raise ValueError(f"No TFRecord files found for inference matching pattern: {glob_pattern}")
+    elif num_files_found != tf.data.UNKNOWN_CARDINALITY:
+         print(f"Found {num_files_found} inference files.")
+
+    dataset = filenames_dataset.interleave(
+        tf.data.TFRecordDataset,
+        cycle_length=AUTO,
+        num_parallel_calls=AUTO
+    )
     
-    dataset = tf.data.TFRecordDataset(filenames)
-    #
-    #
-    #
     for rec in dataset:
         #
         # Create a new writer for the current chunk
