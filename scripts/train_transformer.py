@@ -48,7 +48,8 @@ def main():
     # noise_levels = (0.0, 0.1, 0.2) # Noise level for each view
     apply_binning = (False, False, True) # Apply binning? (Masking based on time bins)
     apply_outlier = (False, False, True) # Apply photometric outlier?
-    maxlens = (300, 150, 300) # Sequence lengths for Anchor, Positive, Negative
+    # maxlens = (300, 150, 300) # Sequence lengths for Anchor, Positive, Negative
+    maxlens = ({'g': 300, 'r': 300, 'i': 300}, {'g': 150, 'r': 150, 'i': 150}, {'g': 300, 'r': 300, 'i': 300}) # Dict of maxlens per band for each view
     bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
     drop_rates = (0.0, 0.0, 0.50) # Fraction of bins/data to drop for binning/masking
     noise_levels = (0.10, 0.0, 0.10) # Fraction of bins/data to drop for binning/masking
@@ -132,7 +133,7 @@ def main():
     # --- Build the model with a dummy call (still recommended) ---
     print("\n\nBuilding model with dummy input...")
     # Use the expected sequence length AFTER sliding_window for the anchor view
-    build_seq_len = maxlens[0] * len(ztf_band) # e.g., 12 or 200 depending on strategy
+    build_seq_len = sum(maxlens[0].values()) # e.g., 12 or 200 depending on strategy
     dummy_input = {
         'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
         'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),

@@ -32,6 +32,8 @@ def standardize(x, err):
     #
     # Calculate the weighted mean
     #
+    # For later runs
+    # weights = 1.0 / (tf.square(err) + 1e-6) # Added epsilon for safety
     weights = 1.0 / tf.square(err)
     weighted_sum = tf.reduce_sum(x * weights)
     sum_of_weights = tf.reduce_sum(weights)

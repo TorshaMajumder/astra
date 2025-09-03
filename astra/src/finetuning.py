@@ -1,6 +1,9 @@
 import tensorflow as tf
 import os
 import numpy as np
+from astra.utils.labels import *
+from astra.utils.helper import standardize
+from astra.src.preprocessing import deserialize
 
 # Make sure AUTO = tf.data.AUTOTUNE is defined globally
 AUTO = tf.data.AUTOTUNE
@@ -8,94 +11,82 @@ AUTO = tf.data.AUTOTUNE
 # Ensure your other data functions are defined:
 # deserialize, standardize, get_window (if using fixed length)
 
-def create_finetune_loader(source_dir,
-                           batch_size,
-                           label_map, # A dict mapping string labels to integer IDs
-                           maxlen, # The fixed sequence length the encoder expects
-                           fraction_to_use=0.01, # The fraction of data to use (e.g., 1%)
-                           is_training=True): # Flag to enable shuffling and taking a fraction
+def finetune_data_loader(source_dir,
+                            batch_size=None,
+                            label_map=None, # A dict mapping string labels to integer IDs
+                            maxlen=None, # The fixed sequence length the encoder expects
+                            threshold=18.0, # Brightness threshold
+                            fraction_to_use=0.01, # The fraction of data to use (e.g., 1%)
+                            is_training=True, # Flag to enable shuffling and taking a fraction
+                            apply_white_noise=True): 
     """
-    Creates a tf.data.Dataset for fine-tuning or evaluating a classifier.
+    Creates a tf.data.Dataset for fine-tuning by remapping labels,
+    filtering by a brightness threshold, and taking a subset of candidates.
     """
-    num_classes = len(label_map)
-    # Create a lookup table to convert string labels to integer IDs
-    keys_tensor = tf.constant(list(label_map.keys()))
-    vals_tensor = tf.constant(list(label_map.values()))
-    table = tf.lookup.StaticHashTable(
-        tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor),
-        default_value=-1 # Default value for unknown labels
-    )
-
+    
     glob_pattern = os.path.join(source_dir, 'partition_*', '*', 'chunk_*.record')
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=is_training)
 
-    # --- Get the total number of samples to calculate the 1% subset ---
-    if is_training and fraction_to_use < 1.0:
-        # This is a bit slow but necessary to get an accurate count for .take()
-        # For very large datasets, you might pre-calculate this count.
-        print("Counting total samples to determine subset size...")
-        total_samples = 0
-        for fn in filenames_dataset:
-            total_samples += sum(1 for _ in tf.data.TFRecordDataset(fn))
+    # --- Helper function to remap labels and check the threshold ---
+    @tf.function
+    def _remap_and_filter_samples(data_record):
+        input_dict = deserialize(data_record)
         
-        subset_size = int(total_samples * fraction_to_use)
-        print(f"Using {fraction_to_use*100:.1f}% of data: {subset_size} out of {total_samples} samples.")
-        # Shuffle the filenames and then take the subset
-        dataset = filenames_dataset.interleave(
-            tf.data.TFRecordDataset, cycle_length=AUTO, num_parallel_calls=AUTO
-        ).take(subset_size)
-    else:
-        # For validation or using the full dataset
-        dataset = filenames_dataset.interleave(
-            tf.data.TFRecordDataset, cycle_length=AUTO, num_parallel_calls=AUTO
-        )
+        # 1. Remap detailed labels to broader ones
+        label_str = input_dict['label']
+        if label_str == b'ACEP' or label_str == b'DCEP' or label_str == b'T2CEP':
+            mapped_label = tf.constant('CEP', dtype=tf.string)
+        elif label_str == b'RRab' or label_str == b'RRc' or label_str == b'RRd': # Using your new examples
+            mapped_label = tf.constant('RRLY', dtype=tf.string)
+        else:
+            mapped_label = label_str # Keep other labels as is
 
-    def preprocess_and_map_label(data):
-        # (This part is identical to your fixed-length inference preprocessor)
-        input_dict = deserialize(data)
-        # ... (standardize magnitude, reconstruct features) ...
-        features = input_dict['input_features']
-        mags, magerrs = features[:, 1], features[:, 2]
-        new_mag, _ = standardize(mags, magerrs)
-        initial_mask = tf.zeros(tf.shape(new_mag)[0], dtype=tf.float32)
-        if apply_white_noise:
-            #
-            new_mag = gaussian_noise(new_mag, noise_level)
+        # 2. Check the brightness threshold
+        mag = input_dict['input_id'][:, 1]
+        magerr = input_dict['input_id'][:, 2]
+        last_index = input_dict['last_index']
         
-        processed_features = tf.stack([features[:, 0], new_mag, features[:, 2], features[:, 3]], axis=1)
-        
-        num_cols = tf.shape(processed_features)[1]
-        
-        final_features, final_mask = get_window(processed_features, initial_mask, maxlen, num_cols)
+        start_index = tf.constant(0, dtype=tf.int64)
+        is_candidate = tf.constant(False, dtype=tf.bool)
 
-        # Prepare model inputs dictionary
-        model_inputs = {
-            'input': tf.expand_dims(final_features[:, 1], axis=-1),
-            'times': tf.expand_dims(final_features[:, 0], axis=-1),
-            'band_info': tf.expand_dims(final_features[:, 3], axis=-1),
-            'mask': final_mask
-        }
+        # Loop through the bands to calculate weighted mean for each
+        for i in tf.range(tf.shape(last_index)[0]):
+            end_index = last_index[i] + 1
+            mag_band = mag[start_index:end_index]
+            magerr_band = magerr[start_index:end_index]
+            
+            # Use a dummy tensor for standardized mag since we only need the mean here
+            _, weighted_mean = standardize(mag_band, magerr_band)
+            
+            if weighted_mean < threshold:
+                is_candidate = tf.constant(True, dtype=tf.bool)
+                break # Found a bright band, no need to check others
+            
+            start_index = end_index
+            
+        return input_dict, mapped_label, is_candidate
 
-        # Map the string label to an integer ID
-        label_id = table.lookup(input_dict['label'])
-        
-        return model_inputs, label_id
-
-    processed_dataset = dataset.map(preprocess_and_map_label, num_parallel_calls=AUTO)
-
-    # Filter out any samples with unknown labels (ID = -1)
-    processed_dataset = processed_dataset.filter(lambda inputs, label: label != -1)
-
-    if is_training:
-        # For fine-tuning, shuffle the small subset well
-        processed_dataset = processed_dataset.shuffle(buffer_size=1000) # Buffer can be large for small subset
-
-    final_loader = processed_dataset.batch(batch_size).prefetch(buffer_size=AUTO)
+    # --- Pre-pass to find all candidates and count them ---
+    print("Starting pre-pass to find and count all candidate objects...")
     
-    return final_loader
+    # Create a temporary dataset to find candidates
+    initial_dataset = filenames_dataset.interleave(
+        tf.data.TFRecordDataset, num_parallel_calls=AUTO).map(_remap_and_filter_samples, num_parallel_calls=AUTO)
+    
+    # Filter to get only the candidates
+    candidate_dataset = initial_dataset.filter(lambda d, l, is_c: is_c)
+
+    # Count the candidates. This will iterate through the dataset once.
+    candidate_count = candidate_dataset.reduce(np.int64(0), lambda x, _: x + 1)
+    print(f"Found {candidate_count} total candidate objects brighter than magnitude {threshold}.")
+    
+    if candidate_count == 0:
+        raise ValueError("No candidate objects found. Check your threshold or data.")
+
+    
 
 
-def create_finetuning_model(encoder_model,
+def finetune_model(encoder_model,
                             num_classes,
                             unfreeze_layers=None): # Num layers to unfreeze from the end
     """
