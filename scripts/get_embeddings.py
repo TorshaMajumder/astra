@@ -11,7 +11,6 @@ from astra.src.embedding import TimeSeriesEmbedding
 from astra.src.encoder import Encoder
 
 
-
 run_directory = "/media3/majumder/contrastive_loss_res/run_20250826_222245/" # <--- SET THIS PATH
 
 model_params, training_params, data_params = load_hparams_from_event_file(run_directory)
@@ -67,7 +66,7 @@ _ = model(dummy_input, training=False)
 print("   Full model built.")
 
 # Path to your saved weights file
-weights_path = "/media3/majumder/contrastive_loss_res/run_20250825_214016/best_contrastive.weights.h5" # <--- SET THIS PATH
+weights_path = "/media3/majumder/contrastive_loss_res/run_20250826_222245/finetune_20250907_002342/best_finetuned_model.weights.h5" # <--- SET THIS PATH
 print(f"\n2. Loading pre-trained weights from: {weights_path}")
 try:
     model.load_weights(weights_path)

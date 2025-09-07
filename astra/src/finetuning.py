@@ -3,7 +3,7 @@ import os
 import numpy as np
 from astra.utils.labels import *
 from astra.utils.helper import standardize
-from astra.src.preprocessing import deserialize
+from astra.src.preprocessing import deserialize, sliding_window, gaussian_noise
 
 # Make sure AUTO = tf.data.AUTOTUNE is defined globally
 AUTO = tf.data.AUTOTUNE
@@ -83,7 +83,93 @@ def finetune_data_loader(source_dir,
     if candidate_count == 0:
         raise ValueError("No candidate objects found. Check your threshold or data.")
 
+    # --- Build the final data pipeline ---
+    if is_training and fraction_to_use < 1.0:
+        subset_size = int(tf.cast(candidate_count, tf.float32) * fraction_to_use)
+        print(f"Using {fraction_to_use*100:.1f}% of candidates for training: {subset_size} samples.")
+
+        # Shuffle all candidates, then take the subset
+        final_dataset = candidate_dataset.shuffle(buffer_size=tf.cast(candidate_count, tf.int64)).take(subset_size)
+    else:
+        # For validation, use all candidates found
+        final_dataset = candidate_dataset
+        print(f"Using all {candidate_count} candidates for validation/testing.")
+
+
+    # --- Helper function to do final preprocessing for the model ---
+    # Create the lookup table for the FINAL mapped labels
+    keys_tensor = tf.constant(list(label_map.keys()))
+    vals_tensor = tf.constant(list(label_map.values()))
+    table = tf.lookup.StaticHashTable(
+        tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor), default_value=-1
+    )
+
+    @tf.function
+    def preprocess_and_map_label(input_dict, mapped_label, is_candidate):
+        # We only need the first two elements now
+        features = input_dict['input_id']
+        mags, magerrs = features[:, 1], features[:, 2]
+        
+        # Standardize again (this is fast and ensures consistency)
+        std_mags, _ = standardize(mags, magerrs)
+        
+        # Apply light augmentation for the training set
+        if is_training and apply_white_noise:
+            std_mags = gaussian_noise(std_mags, noise_level=0.02)
+
+        # processed_features = tf.stack([features[:, 0], std_mags, features[:, 2], features[:, 3]], axis=1)
+        processed_features = tf.concat([
+                            features[:, 0:1], #mjd
+                            tf.reshape(std_mags, (-1,1)),
+                            features[:, 2:] #magerr and band_sorted
+                          ], axis=1)
+
+        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float64)
+        num_cols = tf.shape(processed_features)[1]
+
+
+        # Enforce fixed length
+        # final_features, final_mask = get_window(processed_features, initial_mask, maxlen, num_cols)
+        # maxlen = {'g': 300, 'r': 300, 'i': 300}
+        final_features, final_mask = sliding_window(
+            processed_features,
+            initial_mask,
+            input_dict['last_index'], 
+            input_dict['bands'], 
+            maxlen
+        )
+        
+        # Prepare model inputs
+        model_inputs = {
+            'input': tf.expand_dims(final_features[:, 1], axis=-1),
+            'times': tf.expand_dims(final_features[:, 0], axis=-1),
+            'band_info': tf.expand_dims(final_features[:, 3], axis=-1),
+            'mask': final_mask
+        }
+        
+        # Map the remapped string label (e.g., 'CEP') to a final integer ID
+        label_id = table.lookup(mapped_label)
+        
+        return model_inputs, label_id
+
+
+    # Apply the final preprocessing
+    final_dataset = final_dataset.map(preprocess_and_map_label, num_parallel_calls=AUTO)
     
+    # Filter out any samples with unknown labels (ID = -1)
+    final_dataset = final_dataset.filter(lambda inputs, label: label != -1)
+    
+    if is_training:
+        # Shuffle the small subset again for good measure
+        final_dataset = final_dataset.shuffle(buffer_size=1000)
+        # *** ADD .repeat() HERE for the training set ***
+        final_dataset = final_dataset.repeat() # Loop the small dataset indefinitely
+
+
+    # Batch and prefetch
+    final_loader = final_dataset.batch(batch_size).prefetch(buffer_size=AUTO)
+    
+    return final_loader
 
 
 def finetune_model(encoder_model,
@@ -124,11 +210,22 @@ def finetune_model(encoder_model,
                   break
         
         if transformer_encoder_block:
+            # Access the Python list of layers you defined in the Encoder's __init__
+            # This assumes the list is named 'enc_layers'. Change if you named it differently.
+            encoder_layer_list = transformer_encoder_block.enc_layers
+
             # Freeze all layers first
-            for layer in transformer_encoder_block.layers:
+            print(f"Freezing all {len(encoder_layer_list)} layers in the encoder block...")
+            for layer in encoder_layer_list:
                 layer.trainable = False
-            # Then, unfreeze the last N
-            for layer in transformer_encoder_block.layers[-unfreeze_layers:]:
+
+            # Then, unfreeze the last N layers
+            if unfreeze_layers > len(encoder_layer_list):
+                print(f"Warning: Trying to unfreeze {unfreeze_layers} but encoder only has {len(encoder_layer_list)} layers. Unfreezing all.")
+                unfreeze_layers = len(encoder_layer_list)
+
+            print(f"Unfreezing the last {unfreeze_layers} layers...")
+            for layer in encoder_layer_list[-unfreeze_layers:]:
                 layer.trainable = True
                 print(f"  - Unfreezing layer: {layer.name}")
         else:
@@ -142,8 +239,8 @@ def finetune_model(encoder_model,
     x = encoder_model.output
 
     # Add a new classification head
-    x = layers.Dropout(0.2)(x) # Add dropout for regularization
-    outputs = layers.Dense(num_classes, name='classifier_head')(x) # Output logits
+    x = tf.keras.layers.Dropout(0.2)(x) # Add dropout for regularization
+    outputs = tf.keras.layers.Dense(num_classes, name='classifier_head')(x) # Output logits
 
     # Create the final model
     finetune_model = tf.keras.Model(inputs=inputs, outputs=outputs, name="ASTRA_Classifier")

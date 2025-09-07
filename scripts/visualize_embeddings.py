@@ -8,7 +8,7 @@ import seaborn as sns
 # --- 1. Configuration: Set Your Paths and Parameters ---
 
 # Path to the specific run directory containing the saved .npy files
-run_directory = "/media3/majumder/contrastive_loss_res/run_20250824_064043/" # <--- SET THIS PATH
+run_directory = "/media3/majumder/contrastive_loss_res/run_20250826_222245/finetune_20250907_002342/" # <--- SET THIS PATH
 
 # UMAP parameters (you can tune these to change the visualization)
 N_NEIGHBORS = 15      # Controls how UMAP balances local vs. global structure.
@@ -21,7 +21,7 @@ RANDOM_STATE = 42     # Set for reproducible UMAP results.
 
 # Plotting parameters
 POINT_SIZE = 100
-ALPHA = 0.7   # Point transparency, useful for dense plots.
+ALPHA = 0.5   # Point transparency, useful for dense plots.
 
 # --- 2. Load the Saved Embeddings and Metadata ---
 
@@ -96,13 +96,13 @@ df['label'] = labels_mapped
 df['umap-one'] = embedding_2d[:, 0]
 df['umap-two'] = embedding_2d[:, 1]
 plot_order = ['RRLY', 'CEP']
-
+custom_hex_palette = ['#FEFFA6', '#B62EFF'] # A nice blue and a nice red
 # --- 5. Create and Save the Plot ---
 
 print("\nGenerating plot...")
 
 # Set plot style
-sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
+# sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
 # Create the scatter plot
 plt.figure(figsize=(16, 12))
@@ -110,7 +110,7 @@ scatter_plot = sns.scatterplot(
     x="umap-one", y="umap-two",
     hue="label",         # This tells Seaborn to color points by their label
     hue_order=plot_order,
-    palette=sns.color_palette("tab10", len(np.unique(labels_mapped))), # Use a nice color palette
+    palette=custom_hex_palette, # Use a nice color palette
     data=df,
     legend="full",
     alpha=ALPHA,
