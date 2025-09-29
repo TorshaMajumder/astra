@@ -10,7 +10,6 @@ from lsdb import read_hats
 from dask.distributed import Client
 from astra.bands.bands import ztf_band
 from astra.src.dataset import create_dataset
-from astra.utils.helper import generate_data_finetuning
 
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
@@ -60,11 +59,6 @@ def main():
 
     with Client() as client:
         catalog_compute.compute(scheduler='processes')
-
-    #
-    # Generate data for finetuning from the validation folder
-    #
-    generate_data_finetuning(args.target+"val/", args.target, args.max_lcs_per_chunk, args.threshold_finetuning)
 
     
 
