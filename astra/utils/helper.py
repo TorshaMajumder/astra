@@ -9,6 +9,60 @@ from tensorboard.backend.event_processing import event_accumulator
 from astra.bands.bands import ztf_band
 
 
+@tf.function
+def deserialize(sample):
+    '''
+    Deserialize the tf.records into an input dict format.
+    The columns of each lightcurve in ZTF is in the order: "mjd", "mag", "magerr", "band_sorted"
+
+    NOTE: "num_keys" param should be the total columns in each lightcurve.
+
+    Parameters:
+    ---------------------------------------------------------------------------------------------
+    sample: tf.records sample
+
+    Returns:
+    ---------------------------------------------------------------------------------------------
+    input_dict
+    '''
+    num_keys = 4
+    input_dict = dict()
+    sequence_features = dict()
+    casted_inp_parameters = []
+
+    context_features = {'label': tf.io.FixedLenFeature([],dtype=tf.string),
+                        'bands': tf.io.VarLenFeature(dtype=tf.string),
+                        'last_index': tf.io.VarLenFeature(dtype=tf.int64),
+                        'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
+    # TypeError: Value passed to parameter 'feature_list_sparse_types' has DataType float64 not in list of allowed values: float32, int64, string
+    for i in range(num_keys):
+        sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
+
+    context, sequence = tf.io.parse_single_sequence_example(
+                            serialized=sample,
+                            context_features=context_features,
+                            sequence_features=sequence_features
+                            )
+
+    input_dict['id']   = tf.cast(context['id'], tf.int64)
+    input_dict['last_index'] = tf.sparse.to_dense(context['last_index'])
+    input_dict['label']  = tf.cast(context['label'], tf.string)
+    input_dict['bands']  = tf.sparse.to_dense(context['bands'])
+
+
+    for i in range(num_keys):
+        seq_dim = sequence['dim_{}'.format(i)]
+        seq_dim = tf.sparse.to_dense(seq_dim)
+        seq_dim = tf.cast(seq_dim, tf.float64)
+        casted_inp_parameters.append(seq_dim)
+
+
+    sequence = tf.stack(casted_inp_parameters, axis=2)[0]
+    input_dict['input_id'] = sequence
+
+    return input_dict
+
+
 
 @tf.function
 def standardize(x, err):
@@ -44,105 +98,6 @@ def standardize(x, err):
     x_new = x - mean
 
     return x_new , mean
-
-
-def generate_data_finetuning(path_to_read, path_to_store, objects_per_chunk=100, threshold=18.0):
-    """
-    Generates data for fine-tuning the model. 
-    Consider brighter objects where weighted mean of the magnitude is less than 18.0
-
-    Parameters:
-    ------------------------------------------------------------------------------------
-        path_to_read: Path to the input data file.
-        path_to_store: Path to store the output data file.
-        objects_per_chunk: Maximum number of light curves per chunk.
-        threshold: Magnitude threshold for filtering light curves.
-
-    Returns:
-    ------------------------------------------------------------------------------------
-        Creates files in the specified path.
-    """
-    #
-    writer = None
-    chunk_index = 0
-    start_index = 0
-    object_count = 0
-    filenames = list()
-    weighted_mean = list()
-
-    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
-    print(f"Searching for inference files using pattern: {glob_pattern}")
-    filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
-
-    num_files_found = tf.data.experimental.cardinality(filenames_dataset)
-    if num_files_found == 0:
-        raise ValueError(f"No TFRecord files found for inference matching pattern: {glob_pattern}")
-    elif num_files_found != tf.data.UNKNOWN_CARDINALITY:
-         print(f"Found {num_files_found} inference files.")
-
-    dataset = filenames_dataset.interleave(
-        tf.data.TFRecordDataset,
-        cycle_length=AUTO,
-        num_parallel_calls=AUTO
-    )
-    
-    for rec in dataset:
-        #
-        # Create a new writer for the current chunk
-        #
-        if object_count == 0:
-            writer = tf.io.TFRecordWriter(path_to_store + f"finetuning/chunk_{chunk_index}.record")
-
-        example = tf.train.SequenceExample()
-        example.ParseFromString(rec.numpy())
-        #
-        # Convert to TensorFlow tensors
-        # The columns of each lightcurve in ZTF is in the order: "mjd", "mag", "magerr", "band_sorted"
-        #
-        last_index = example.context.feature['last_index'].int64_list.value
-        label = example.context.feature['label'].bytes_list.value[0].decode('utf-8')
-        mag = tf.convert_to_tensor(example.feature_lists.feature_list['dim_1'].feature[0].float_list.value, dtype=tf.float64)
-        magerr = tf.convert_to_tensor(example.feature_lists.feature_list['dim_2'].feature[0].float_list.value, dtype=tf.float64)
-        #
-        # Get the weighted mean of the light curve for each band
-        #
-        for i in range(len(last_index)):
-            end_index = last_index[i] + 1  
-            # Filter mag and magerr for the current segment
-            mag_band = mag[start_index:end_index]
-            magerr_band = magerr[start_index:end_index]
-            # Apply standardization
-            _, w_mean = standardize(mag_band, magerr_band)
-            weighted_mean.append(w_mean)
-            # Update start_index for the next segment
-            start_index = end_index
-        #
-        # Check if the weighted mean is brighter than the threshold (18.0)
-        #
-        if any(w_mean < threshold for w_mean in weighted_mean):
-            # 
-            # Write the example to the new TFRecord file
-            # Increment count if object is stored
-            #
-            writer.write(example.SerializeToString())
-            object_count += 1  
-        #
-        if object_count == objects_per_chunk:
-            #
-            # Close the current writer and reset the count and increase the chunk index
-            #
-            writer.close()
-            object_count = 0
-            chunk_index += 1
-    #
-    # Close the last writer if it's still open
-    #
-    if writer is not None:
-        writer.close()
-
-
-
-
 
 def load_hparams_from_event_file(run_directory):
     """
@@ -219,6 +174,68 @@ def load_hparams_from_event_file(run_directory):
         import traceback
         traceback.print_exc()
         return None, None, None
+
+
+
+def filter_by_class(source, target_counts, shuffle=True, seed=42):
+    """
+    Filters a TFRecord dataset to get a specific number of samples for given classes.
+
+    Args:
+        filenames (tf.data.Dataset): A dataset of TFRecord filenames.
+        target_counts (dict): A dictionary mapping class names (bytes) to the desired 
+                              number of samples (int). E.g., {b'A': 1000, b'B': 500}.
+        parse_fn (function): The function to parse a single TFRecord proto.
+
+    Returns:
+        tf.data.Dataset: A new dataset containing the specified number of samples
+                         for each class.
+    """
+    # 1. Create a single, parsed dataset from all files.
+    # Using AUTOTUNE is best practice for performance.
+    AUTO = tf.data.AUTOTUNE
+
+    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
+    base_dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    parsed_dataset = base_dataset.map(deserialize, num_parallel_calls=AUTO)
+    
+    # Cache the parsed dataset for efficiency, as we will iterate over it multiple times.
+    parsed_dataset = parsed_dataset.cache()
+
+    # 2. Create a list of limited datasets, one for each target class.
+    limited_datasets = []
+    print("Filtering for each class...")
+    for class_name, count in target_counts.items():
+        print(f" - Getting {count} samples for class: {class_name.decode()}")
+
+        # Filter for the specific class
+        class_ds = parsed_dataset.filter(lambda x: x['label'] == class_name)
+        
+        # Take the specified number of samples
+        class_ds = class_ds.take(count)
+        
+        limited_datasets.append(class_ds)
+
+    if not limited_datasets:
+        return tf.data.Dataset.from_tensor_slices([]) # Return an empty dataset if dict is empty
+
+    # 3. Concatenate all the small datasets into one.
+    # Start with the first dataset in the list.
+    final_dataset = limited_datasets[0]
+    # Sequentially concatenate the rest.
+    for ds_to_add in limited_datasets[1:]:
+        final_dataset = final_dataset.concatenate(ds_to_add)
+
+    # 4. Important: Shuffle the final dataset.
+    # The dataset is currently ordered (all 'A's, then all 'B's, etc.).
+    # Shuffling is crucial for training a model.
+    total_samples = sum(target_counts.values())
+    final_dataset = final_dataset.shuffle(buffer_size=total_samples, reshuffle_each_iteration=True)
+
+    print(f"\nSuccessfully created a dataset with {total_samples} total samples.")
+    
+    return final_dataset.prefetch(AUTO)
 
     
 
