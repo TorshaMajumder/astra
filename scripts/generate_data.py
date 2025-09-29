@@ -57,13 +57,9 @@ def main():
                                                             train_size=args.train_size,
                                                             max_lcs_per_chunk=args.max_lcs_per_chunk)
 
-    with Client() as client:
+    with Client(n_workers=8, threads_per_worker=1, memory_limit="20GB") as client:
         catalog_compute.compute(scheduler='processes')
-
-    #
-    # Generate data for finetuning from the validation folder
-    #
-    generate_data_finetuning(args.target+"val/", args.target, args.max_lcs_per_chunk, args.threshold_finetuning)
+        client.close()
 
     
 
