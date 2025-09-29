@@ -64,7 +64,7 @@ def main():
     #
     # Generate data for finetuning from the validation folder
     #
-    generate_data_finetuning(args.target+"val/", args.target, args.max_lcs_per_chunk, args.threshold_finetuning)
+    # generate_data_finetuning(args.target+"val/", args.target, args.max_lcs_per_chunk, args.threshold_finetuning)
 
     
 
