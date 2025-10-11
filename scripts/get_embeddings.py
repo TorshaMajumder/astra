@@ -57,10 +57,10 @@ print("   Model instantiated.")
 max_len = {'g': 400, 'r': 500, 'i': 100} # <--- IMPORTANT: SET THIS TO YOUR ANCHOR'S MAXLENS
 build_seq_len = sum(max_len.values()) # <--- IMPORTANT: SET THIS TO YOUR ANCHOR'S SEQ LENGTH
 dummy_input = {
-    'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-    'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-    'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-    'mask': tf.zeros((1, build_seq_len), dtype=tf.float64)
+    'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+    'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+    'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+    'mask': tf.zeros((1, build_seq_len), dtype=tf.float32)
 }
 _ = model(dummy_input, training=False)
 print("   Full model built.")
@@ -82,10 +82,10 @@ print("\n3. Creating the encoder-only model for generating embeddings...")
 
 # Define the inputs with variable sequence length
 input_layer = {
-    'input': tf.keras.Input(shape=(build_seq_len, 1), name='input', dtype=tf.float64),
-    'times': tf.keras.Input(shape=(build_seq_len, 1), name='times', dtype=tf.float64),
-    'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='band_info', dtype=tf.float64),
-    'mask': tf.keras.Input(shape=(build_seq_len,), name='mask', dtype=tf.float64)
+    'input': tf.keras.Input(shape=(build_seq_len, 1), name='input', dtype=tf.float32),
+    'times': tf.keras.Input(shape=(build_seq_len, 1), name='times', dtype=tf.float32),
+    'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='band_info', dtype=tf.float32),
+    'mask': tf.keras.Input(shape=(build_seq_len,), name='mask', dtype=tf.float32)
 }
 
 # --- Break down the forward pass step-by-step ---

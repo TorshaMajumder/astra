@@ -39,7 +39,7 @@ def main():
     # Redefine parameters if needed (moved some defaults into train function)
     temperature = 0.1 # Often lower temperature works better
     patience = 100 # Adjust as needed
-    epochs = 20 # Train longer
+    epochs = 2 # Train longer
     # lr = 1e-4 # Use initial_lr in train function if not using schedule
     batch_size=300 # Adjust based on GPU memory
 
@@ -53,9 +53,9 @@ def main():
     bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
     drop_rates = (0.0, 0.0, 0.50) # Fraction of bins/data to drop for binning/masking
     noise_levels = (0.10, 0.0, 0.10) # Fraction of bins/data to drop for binning/masking
-    path_to_read = "/media3/majumder/dataset/lyrae_cep/train/" # Make sure this path is correct and mounted
-    path_to_val = "/media3/majumder/dataset/lyrae_cep/val/" # Make sure this path is correct and mounted
-    path_to_save = "/media3/majumder/contrastive_loss_res/" # Save path for model checkpoints
+    path_to_read = "dataset/cepheids/train/" # Make sure this path is correct and mounted
+    path_to_val = "dataset/cepheids/val/" # Make sure this path is correct and mounted
+    path_to_save = "contrastive_loss_res/" # Save path for model checkpoints
 
     # Model Parameters
     num_layers = 4 # Deeper model?
@@ -135,10 +135,10 @@ def main():
     # Use the expected sequence length AFTER sliding_window for the anchor view
     build_seq_len = sum(maxlens[0].values()) # e.g., 12 or 200 depending on strategy
     dummy_input = {
-        'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-        'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-        'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float64),
-        'mask': tf.zeros((1, build_seq_len), dtype=tf.float64) # Mask shape (batch, seq_len)
+        'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+        'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+        'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+        'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
     }
     _ = model(dummy_input,  training=False)
     model.summary()

@@ -281,7 +281,6 @@ def deserialize(sample):
                         'bands': tf.io.VarLenFeature(dtype=tf.string),
                         'last_index': tf.io.VarLenFeature(dtype=tf.int64),
                         'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
-    # TypeError: Value passed to parameter 'feature_list_sparse_types' has DataType float64 not in list of allowed values: float32, int64, string
     for i in range(num_keys):
         sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
 
@@ -300,7 +299,6 @@ def deserialize(sample):
     for i in range(num_keys):
         seq_dim = sequence['dim_{}'.format(i)]
         seq_dim = tf.sparse.to_dense(seq_dim)
-        seq_dim = tf.cast(seq_dim, tf.float64)
         casted_inp_parameters.append(seq_dim)
 
 
@@ -514,11 +512,6 @@ def contrastive_data_loader(source,
 
 
 
-
-
-# Ensure your other data functions are defined:
-# deserialize, standardize, sliding_window, get_window, ztf_band
-
 def create_inference_loader(source,
                             batch_size,
                             maxlen, # The fixed sequence length the encoder expects
@@ -565,32 +558,24 @@ def create_inference_loader(source,
         # input_dict = deserialize(data)
         mags = input_dict['input_id'][:,1]
         magerrs = input_dict['input_id'][:,2]
-        # features = input_dict['input_features']
-        # mags = features[:, 1]
-        # magerrs = features[:, 2]
-
-        # 1. Standardize Magnitude (same way as during training)
+        # Standardize Magnitude (same way as during training)
         std_mags, _ = standardize(mags, magerrs)
 
         # 2. Reconstruct features with the standardized magnitude
-        # processed_features = tf.stack([
-        #     input_dict['input_id'][:, 0], # time
-        #     std_mags,       # standardized magnitude
-        #     input_dict['input_id'][:, 2:], # magerr & band_info
-        # ], axis=1)
+        #
         processed_features = tf.concat([
                             input_dict['input_id'][:, 0:1], #mjd
                             tf.reshape(std_mags, (-1,1)),
                             input_dict['input_id'][:, 2:] #magerr and band_sorted
                           ], axis=1)
 
-        # --- THIS IS THE KEY CHANGE ---
-        # 3. Apply Padding/Cropping to the fixed `maxlen`.
+        # 
+        # Apply Padding/Cropping to the fixed `maxlen`.
         # Create a zero mask for the original length.
-        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float64)
+        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
         num_cols = tf.shape(processed_features)[1]
-        # sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
-        # Use get_window to enforce the fixed length.
+        # 
+        # Use get_window to enforce the fixed length
         final_features, final_mask = sliding_window(
             processed_features,
             initial_mask,
@@ -598,53 +583,23 @@ def create_inference_loader(source,
             input_dict['bands'], 
             maxlen
         )
-        # --- END OF KEY CHANGE ---
-
-        # 3. Create the attention mask. It's all zeros (no masking) for now,
-        # as padding will be handled by padded_batch later.
-        # mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
-
-        
+    
         # 4. Prepare output dictionary with variable-length tensors
         output_dict = {}
         output_dict['input'] = tf.expand_dims(final_features[:, 1], axis=-1)
         output_dict['times'] = tf.expand_dims(final_features[:, 0], axis=-1)
         output_dict['band_info'] = tf.expand_dims(final_features[:, 3], axis=-1)
-        output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) # Mask is also variable length
+        output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) 
         output_dict['id'] = input_dict['id']
         output_dict['label'] = input_dict['label']
 
         return output_dict
-    # --- End Mapping Function ---
+    
 
     processed_dataset = dataset.map(preprocess_for_inference, num_parallel_calls=AUTO)
 
-    # --- Use padded_batch to handle variable lengths ---
-    # Define the shapes to pad to. `None` in a dimension means it's variable
-    # and will be padded to the maximum length of that dimension in each batch.
-    # padded_shapes = {
-    #     'input': tf.TensorShape([None, 1]),
-    #     'times': tf.TensorShape([None, 1]),
-    #     'band_info': tf.TensorShape([None, 1]),
-    #     'mask': tf.TensorShape([None]),
-    #     'id': tf.TensorShape([]),       # Scalar, no padding needed
-    #     'label': tf.TensorShape([])   # Scalar, no padding needed
-    # }
-
-    # # Define the values to use for padding.
-    # padding_values = {
-    #     'input': tf.constant(0.0, dtype=tf.float32),
-    #     'times': tf.constant(0.0, dtype=tf.float32),
-    #     'band_info': tf.constant(0.0, dtype=tf.float32),
-    #     'mask': tf.constant(1.0, dtype=tf.float32), # <-- CRUCIAL: Pad the mask with 1s
-    #     'id': tf.constant(0, dtype=tf.int64),
-    #     'label': tf.constant("", dtype=tf.string)
-    # }
-
     # Apply padded_batch
-    final_loader = processed_dataset.batch(
-        batch_size
-    )
+    final_loader = processed_dataset.batch(batch_size)
 
     # Prefetch to overlap data loading with model execution
     final_loader = final_loader.prefetch(buffer_size=AUTO)

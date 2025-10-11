@@ -124,7 +124,7 @@ def finetune_data_loader(source_dir,
                             features[:, 2:] #magerr and band_sorted
                           ], axis=1)
 
-        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float64)
+        initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
         num_cols = tf.shape(processed_features)[1]
 
 

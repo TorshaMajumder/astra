@@ -75,6 +75,7 @@ var/
 # virtualenv
 venv/
 ENV/
+*venv*/
 
 ## Remove setup.py
 setup.py

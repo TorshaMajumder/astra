@@ -34,7 +34,6 @@ def deserialize(sample):
                         'bands': tf.io.VarLenFeature(dtype=tf.string),
                         'last_index': tf.io.VarLenFeature(dtype=tf.int64),
                         'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
-    # TypeError: Value passed to parameter 'feature_list_sparse_types' has DataType float64 not in list of allowed values: float32, int64, string
     for i in range(num_keys):
         sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
 
@@ -53,7 +52,6 @@ def deserialize(sample):
     for i in range(num_keys):
         seq_dim = sequence['dim_{}'.format(i)]
         seq_dim = tf.sparse.to_dense(seq_dim)
-        seq_dim = tf.cast(seq_dim, tf.float64)
         casted_inp_parameters.append(seq_dim)
 
 
