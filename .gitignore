@@ -11,6 +11,11 @@ data/
 # Notebooks
 notebooks/overall_label_counts.csv
 
+# Ignores any test_*.py files
+test_*.py
+*_test.py
+test*.py
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -70,10 +75,9 @@ var/
 venv/
 ENV/
 
-
-
 ## Remove setup.py
 setup.py
+
 ## Remove any other files
 astra/utils/test.py
 /scripts/test.py

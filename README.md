@@ -3,16 +3,27 @@
 ```
 git clone https://github.com/TorshaMajumder/astra.git
 cd astra
+python3 -m venv venv
+source venv/bin/activate
 python3 -m pip install -e .
+pip install -r requirements.txt
 ```
 ## Creating Tensor Records
 ### When LSBD contain a "Class" column for labels
 ```
-astra-data --target ../dataset/lyrae/ --path_to_buff ../dataset/lyrae/hats/zubercal_vrrlyr --min_detec 100 --train_size 0.80 --max_lcs_per_chunk 200
+astra-data --dest ../dataset/lyrae/ --path_to_buff ../dataset/lyrae/hats/zubercal_vrrlyr --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200
 ```
 ### When LSBD doesn't have a "Class" column or renaming the "Class" column
 ```
-astra-data --target ../dataset/agn/ --path_to_buff ../dataset/agn/hats/zubercal_vagn --min_detec 100 --train_size 0.80 --max_lcs_per_chunk 200 --label "AGN"
+astra-data --dest ../dataset/agn/ --path_to_buff ../dataset/agn/hats/zubercal_vagn --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200 --label "AGN"
+```
+### If you want to delete some classes from LSDB
+```
+astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/zubercal_vcep --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200 --del_label ACEP DCEP
+```
+### If you want to use/keep specific classes from LSDB
+```
+astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/zubercal_vcep --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200 --keep_label ACEP DCEP T2CEP
 ```
 ## For more help!
 ```
