@@ -1,12 +1,12 @@
 # ASTRA: Attention-based Self-supervised Time-series Representation Architecture
 ## Working in DEV mode
 ```
-git clone https://github.com/TorshaMajumder/astra.git
-cd astra
-python3 -m venv venv
-source venv/bin/activate
-python3 -m pip install -e .
-pip install -r requirements.txt
+>> git clone https://github.com/TorshaMajumder/astra.git
+>> cd astra
+>> python3 -m venv venv
+>> source venv/bin/activate
+>> python3 -m pip install -e .
+>> pip install -r requirements.txt
 ```
 ## Creating Tensor Records
 ### When LSBD contain a "Class" column for labels
