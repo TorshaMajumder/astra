@@ -3,6 +3,7 @@
 .project
 .pydevproject
 .vscode
+astra/.DS_Store
 
 # Dataset
 dataset/
