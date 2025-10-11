@@ -11,6 +11,7 @@ data/
 
 # Notebooks
 notebooks/overall_label_counts.csv
+notebooks/test_data_gen.ipynb
 
 # Ignores any test_*.py files
 test_*.py
@@ -82,5 +83,5 @@ setup.py
 
 ## Remove any other files
 astra/utils/test.py
-/scripts/test.py
+scripts/test.py
 
