@@ -1,11 +1,13 @@
 #
 # Import all dependencies
 #
+import os
 import time
 import logging
 import argparse
 import warnings
 import traceback
+import pandas as pd
 from lsdb import read_hats
 from dask.distributed import Client
 from astra.bands.bands import ztf_band
@@ -22,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(prog='astra-data',
                                     description="Generate data as tensorflow records")
     
-    parser.add_argument('--target', default="../dataset/cepheids/", type=str,
+    parser.add_argument('--dest', default="../dataset/cepheids/", type=str,
                     help='Directory path for the files to be stored.')
     parser.add_argument('--path_to_buff', default="../dataset/cepheids/hats/zubercal_vcep", type=str,
                     help='Directory path for the files to be read.')
@@ -36,8 +38,10 @@ def main():
                     help='Number of lcs to be stored in a tf record chunk.')  
     parser.add_argument('--train_size', default=0.8, type=float,
                     help='Training fraction.') 
-    parser.add_argument('--threshold_finetuning', default=18.0, type=float,
-                    help='Magnitude threshold for filter data for finetuning.')      
+    parser.add_argument('--del_label', default=None, type=str, nargs='+', 
+                    help='Labels deleted from the dataset. Please use "del_label" or "keep_label", not both.')  
+    parser.add_argument('--keep_label', default=None, type=str, nargs='+', 
+                    help='Labels added from the dataset. Please use "del_label" or "keep_label", not both.') 
 
    
     args = parser.parse_args()
@@ -45,20 +49,34 @@ def main():
     # Read catalog
     #
     read_catalog = read_hats(args.path_to_buff, )
+
+    if not os.path.exists(args.dest):
+                os.makedirs(args.dest, exist_ok=True)
+    #
+    dest_obj = os.path.join(args.dest, "objects")
+    os.makedirs(dest_obj, exist_ok=True)
+    #
+    # Create an empty dataframe with the expected output structure for the 'meta' argument.
+    #
+    meta_df = pd.DataFrame(columns=["label", "size", "start_index"])
     #
     #
     #
     catalog_compute = read_catalog._ddf.map_partitions(create_dataset, 
-                                                            target=args.target,
+                                                            target=args.dest,
+                                                            target_obj=dest_obj,
                                                             bands=ztf_band,
                                                             label=args.label,
                                                             seed=args.seed,
                                                             min_detec=args.min_detec,
                                                             train_size=args.train_size,
-                                                            max_lcs_per_chunk=args.max_lcs_per_chunk)
+                                                            max_lcs_per_chunk=args.max_lcs_per_chunk,
+                                                            del_label = args.del_label,
+                                                            keep_label = args.keep_label,
+                                                            meta=meta_df)
 
-    with Client(n_workers=8, threads_per_worker=1, memory_limit="20GB") as client:
-        catalog_compute.compute(scheduler='processes')
+    with Client(n_workers=3, threads_per_worker=1, memory_limit="65GB") as client:
+        catalog_compute.compute()
         client.close()
 
     

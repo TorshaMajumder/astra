@@ -2,7 +2,7 @@
 # Import all dependencies
 #
 import os
-import time
+import gc
 import logging
 import warnings
 import traceback
@@ -10,11 +10,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import tensorflow as tf
-from lsdb import read_hats
-import matplotlib.pyplot as plt
-from dask.distributed import Client
-from joblib import Parallel, delayed
 from nested_pandas import NestedDtype
+from tensorflow.keras import backend as K 
 from joblib import wrap_non_picklable_objects
 
 warnings.filterwarnings(action="ignore") 
@@ -140,6 +137,10 @@ def process_lc(id_, row, bands, min_detec):
     #
     last_index = dict()
     #
+    # Define an offset parameter for ZTF MJD
+    # 
+    OFFSET = 58000
+    #
     # Store the label of the lightcurve
     #
     label = row["Class"]
@@ -181,7 +182,8 @@ def process_lc(id_, row, bands, min_detec):
                     return None
                     
             temp_df = temp_df.replace({"band_sorted":bands})
-            temp_df = temp_df[["mjd", "mag", "magerr", "band_sorted"]]
+            temp_df = temp_df[["mjd", "mag", "magerr", "band_sorted"]].assign(
+                                                        mjd = lambda df: df["mjd"] - OFFSET)
             numpy_lc = temp_df.to_numpy()
             #
             return id_, label, last_index, numpy_lc
@@ -192,7 +194,7 @@ def process_lc(id_, row, bands, min_detec):
         
         
         
-def write_records(frame, dest, max_lcs_per_chunk, n_jobs, bands, min_detec, n_partition):
+def write_records(frame, dest, max_lcs_per_chunk, bands, min_detec, n_partition):
     """
     Get frames with fixed number of lightcurves in each chunk
 
@@ -203,7 +205,6 @@ def write_records(frame, dest, max_lcs_per_chunk, n_jobs, bands, min_detec, n_pa
                         has the highest priority and i-filter has the lowest.
         frame (dataframe): catalog data
         dest (str): path to store the files
-        n_jobs (int): # of parallel jobs
         min_detec (int): minimum detections in each light curve
                         Note: For ZTF, "min_detec" for g & r-filters is user-defined
                         but, for i-filter there is no min_detec 
@@ -218,23 +219,27 @@ def write_records(frame, dest, max_lcs_per_chunk, n_jobs, bands, min_detec, n_pa
                   for i in range(0, frame.shape[0], max_lcs_per_chunk)]
 
     for counter, subframe in enumerate(collection):
-        var = Parallel(n_jobs=n_jobs)(delayed(process_lc)(id_, row, bands, min_detec) \
-                                    for id_, row in subframe.iterrows())
-
-        with tf.io.TFRecordWriter(dest+f"/chunk_{n_partition}_{counter}.record") as writer:
-            for _, data_lc in enumerate(var):
-                if data_lc is not None:
-                    create_record(*data_lc, writer)     
+        # Open one TFRecord file for the entire chunk
+        record_path = os.path.join(dest, f"chunk_{n_partition}_{counter}.record")
+        with tf.io.TFRecordWriter(record_path) as writer:
+            for id_, row in subframe.iterrows():
+                # Call process_lc directly for a single row
+                processed_data = process_lc(id_, row, bands, min_detec)
+                # If the row was processed successfully, write it to the record
+                if processed_data is not None:
+                    create_record(*processed_data, writer)    
 
 def create_dataset(df,
                     target,
-                    njobs=1,
+                    target_obj,
                     bands=None,
                     seed=42,
                     label=None,
                     min_detec=100,
                     train_size=0.80,
                     max_lcs_per_chunk=100,
+                    del_label=None,
+                    keep_label=None,
                     partition_info=None):
     
     """
@@ -244,10 +249,10 @@ def create_dataset(df,
     ---------------------------------------------------------
         df (DataFrame): contains the catalog file
         target (str): directory path for the files to be stored
+        target_obj (str): directory path for the .CSV files to be stored
         bands (dict): band information (filters should be in a ordered sequence)
                         e.g. ZTF band order is {g, r, i}, meaning g-filter 
                         has the highest priority and i-filter has the lowest.
-        n_jobs (int): # of parallel jobs
         label (str): label associated with the catalog.
                         Provide this value only if the 'Class' column 
                         is missing in the dataframe (df). 
@@ -260,74 +265,97 @@ def create_dataset(df,
         
     """
     #
-    # First partition_info in None
-    # Start from the 2nd partition_info
+    # 
     #
-    if partition_info is not None:
-        info_df = pd.DataFrame()
-        LC_COLUMN = "lc"
-        n_partition = partition_info['number']
-        str_div = partition_info['division']
+    info_df = pd.DataFrame()
+    LC_COLUMN = "lc"
+    n_partition = partition_info['number']
+    str_div = partition_info['division']
+    #
+    #
+    #
+    try: 
+        if not train_size or train_size > 1:
+            raise ValueError(f"Please provide a valid train_size fraction (between 0-1). Got {train_size}")
+        
+        if bands is None:
+            raise ValueError(f"Please provide band information with ordered filters. Got {bands}")
+        #
+        df = df.assign(**{LC_COLUMN: df[LC_COLUMN].astype(NestedDtype.from_pandas_arrow_dtype(df.dtypes[LC_COLUMN]))},)
+        df = df.dropna(subset=['lc'])
         #
         #
         #
-        try: 
-            if not train_size or train_size > 1:
-                raise ValueError(f"Please provide a valid train_size fraction (between 0-1). Got {train_size}")
-            
-            if bands is None:
-                raise ValueError(f"Please provide band information with ordered filters. Got {bands}")
-            
-            if not os.path.exists(target):
-                os.makedirs(target, exist_ok=True)
-            #
-            dest = os.path.join(target, "objects")
-            os.makedirs(dest, exist_ok=True)
-            #
-            df = df.assign(**{LC_COLUMN: df[LC_COLUMN].astype(NestedDtype.from_pandas_arrow_dtype(df.dtypes[LC_COLUMN]))},)
-            df = df.dropna(subset=['lc'])
-            #
-            #
-            #
-            if "Class" not in df.columns:
-                if label: 
-                    #
-                    #
-                    #
-                    df['Class'] = label
-                else:
-                    raise AttributeError(f"\nException Raised: You must provide a class/label to this catalog."
-                        f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
-                        f"\nparameter is {label} . Please provide a 'Class' column to the catalog or define" 
-                        f"\nthe 'label' parameter.")
-            #
-            # Save the number of classes and their counts in a .CSV file
-            #
-            unique, counts = np.unique(df['Class'], return_counts=True)
-            info_df['label'] = unique
-            info_df['size'] = counts
-            info_df['start_index'] = str_div
-            info_df.to_csv(os.path.join(target, "objects", f'partition_{n_partition}.csv'), index=False)
-            #
-            # Separate by class
-            #
-            cls_groups = df.groupby('Class')
-            #
-            # Write lcs in the records
-            #
-            for cls_name, cls_meta in tqdm(cls_groups, total=len(cls_groups)):
-                subsets = train_test_split(cls_meta, train_size=train_size, seed=seed)
+        if "Class" not in df.columns:
+            if label: 
+                #
+                #
+                #
+                df['Class'] = label
+            else:
+                raise AttributeError(f"\nException Raised: You must provide a class/label to this catalog."
+                    f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
+                    f"\nparameter is {label} . Please provide a 'Class' column to the catalog or define" 
+                    f"\nthe 'label' parameter.")
+        # ====================================================================
+        # 
+        # First, ensure that both arguments are not provided at the same time to avoid confusion.
+        if del_label is not None and keep_label is not None:
+            raise ValueError("Please provide either 'del_label' or 'keep_label', but not both.")
+        # Logic to delete specified labels
+        # This runs if del_label is a list and keep_label was not provided.
+        if del_label is not None:
+            # The ~ operator inverts the boolean mask, effectively selecting rows
+            # that are NOT in the del_label list.
+            df = df[~df['Class'].isin(del_label)]
 
-                for subset_name, frame in subsets:
-                    if frame is None:
-                        continue
-                    dest = os.path.join(target, subset_name, f"partition_{n_partition}", cls_name)
-                    os.makedirs(dest, exist_ok=True)
-                    write_records(frame, dest, max_lcs_per_chunk, n_jobs=njobs, 
-                                  bands=bands, min_detec=min_detec, n_partition=n_partition)
+        # Logic to keep only specified labels
+        # This runs if keep_label is a list and del_label was not provided.
+        if keep_label is not None:
+            # This selects only the rows where the 'Class' value is in the keep_label list.
+            df = df[df['Class'].isin(keep_label)]
 
-        except Exception:
-            print(f"\n\n[Traceback]\n {traceback.format_exc()}\n")
+        # After filtering, it's possible the DataFrame for this partition is empty.
+        # If so, we can skip the rest of the processing for this partition.
+        if df.empty:
+            print(f"Partition {n_partition}: DataFrame is empty after label filtering. Skipping file generation.")
+            # The function will now naturally proceed to the cleanup section.
+        
+        #
+        # Save the number of classes and their counts in a .CSV file
+        #
+        unique, counts = np.unique(df['Class'], return_counts=True)
+        info_df['label'] = unique
+        info_df['size'] = counts
+        info_df['start_index'] = str_div
+        info_df.to_csv(os.path.join(target_obj, f'partition_{n_partition}.csv'), index=False)
+        #
+        # Separate by class
+        #
+        cls_groups = df.groupby('Class')
+        #
+        # Write lcs in the records
+        #
+        for cls_name, cls_meta in tqdm(cls_groups, total=len(cls_groups)):
+            subsets = train_test_split(cls_meta, train_size=train_size, seed=seed)
+
+            for subset_name, frame in subsets:
+                if frame is None:
+                    continue
+                dest = os.path.join(target, subset_name, f"partition_{n_partition}", cls_name)
+                os.makedirs(dest, exist_ok=True)
+                write_records(frame, dest, max_lcs_per_chunk, 
+                                bands=bands, min_detec=min_detec, n_partition=n_partition)
+
+    except Exception:
+        print(f"\n\n[Traceback]\n {traceback.format_exc()}\n")
+
+    # 
+    # Clear the global Keras/TensorFlow session to release graph memory
+    #
+    K.clear_session()
+    # Explicitly call the garbage collector
+    gc.collect()
             
    
 

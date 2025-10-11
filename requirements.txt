@@ -7,6 +7,7 @@ anyio==4.10.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
 arrow==1.3.0
+-e git+https://github.com/TorshaMajumder/astra.git@ed3a1f6a49a6b1d6eb38a7efd6e9fe59f9de637d#egg=astra
 astropy==7.1.0
 astropy-iers-data==0.2025.8.4.0.42.59
 asttokens==3.0.0
@@ -26,13 +27,13 @@ cloudpickle==3.1.1
 comm==0.2.3
 contourpy==1.3.3
 cycler==0.12.1
-dask==2025.7.0
+dask==2025.9.1
 DateTime==5.5
 debugpy==1.8.16
 decorator==5.2.1
 defusedxml==0.7.1
 Deprecated==1.2.18
-distributed==2025.7.0
+distributed==2025.9.1
 executing==2.2.0
 fastjsonschema==2.21.1
 flatbuffers==25.2.10
@@ -45,7 +46,7 @@ google-pasta==0.2.0
 grpcio==1.74.0
 h11==0.16.0
 h5py==3.14.0
-hats==0.6.2
+hats==0.6.7
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.10
@@ -80,7 +81,7 @@ lark==1.2.2
 libclang==18.1.1
 llvmlite==0.44.0
 locket==1.0.0
-lsdb==0.6.3
+lsdb==0.6.7
 lz4==4.4.4
 Markdown==3.8.2
 markdown-it-py==3.0.0
@@ -153,6 +154,7 @@ sniffio==1.3.1
 sortedcontainers==2.4.0
 soupsieve==2.7
 stack-data==0.6.3
+tabulate==0.9.0
 tblib==3.1.0
 tensorboard==2.19.0
 tensorboard-data-server==0.7.2
