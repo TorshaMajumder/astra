@@ -60,16 +60,7 @@ def main():
     #
     meta_df = pd.DataFrame(columns=["label", "size", "start_index"])
     #
-    dest = os.path.join(args.target, "objects")
-    os.makedirs(dest, exist_ok=True)
-
-    # Create an empty dataframe with the expected output structure for the 'meta' argument.
-    # It should include any new columns you add in your function.
-    # meta_df = read_catalog._ddf.head(0)
-    meta_df = pd.DataFrame(columns=["label", "size", "start_index"])
-    # if "Class" not in meta_df.columns:
-    #     meta_df['Class'] = pd.Series(dtype='object') # Or whatever dtype 'Class' will be
-
+    #
     #
     catalog_compute = read_catalog._ddf.map_partitions(create_dataset, 
                                                             target=args.dest,
