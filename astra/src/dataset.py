@@ -14,6 +14,7 @@ from nested_pandas import NestedDtype
 from tensorflow.keras import backend as K 
 from joblib import wrap_non_picklable_objects
 
+
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
 
@@ -212,6 +213,22 @@ def write_records(frame, dest, max_lcs_per_chunk, bands, min_detec, n_partition)
         max_lcs_per_chunk (int): # of lcs to be stored in a chunk
 
     """
+    # collection = [frame.iloc[i:i+max_lcs_per_chunk] \
+    #               for i in range(0, frame.shape[0], max_lcs_per_chunk)]
+
+    # for counter, subframe in enumerate(collection):
+    #     # Open one TFRecord file for the entire chunk
+    #     record_path = os.path.join(dest, f"chunk_{n_partition}_{counter}.record")
+    #     with tf.io.TFRecordWriter(record_path) as writer:
+            
+    #         # Process each row sequentially and write it immediately
+    #         for id_, row in subframe.iterrows():
+    #             # Call process_lc directly for a single row
+    #             processed_data = process_lc(id_, row, bands, min_detec)
+                
+    #             # If the row was processed successfully, write it to the record
+    #             if processed_data is not None:
+    #                 create_record(*processed_data, writer)
     #
     # 
     #
@@ -280,6 +297,15 @@ def create_dataset(df,
         
         if bands is None:
             raise ValueError(f"Please provide band information with ordered filters. Got {bands}")
+
+
+        
+        # if not os.path.exists(target):
+        #     os.makedirs(target, exist_ok=True)
+        # #
+        # dest = os.path.join(target, "objects")
+        # os.makedirs(dest, exist_ok=True)
+
         #
         df = df.assign(**{LC_COLUMN: df[LC_COLUMN].astype(NestedDtype.from_pandas_arrow_dtype(df.dtypes[LC_COLUMN]))},)
         df = df.dropna(subset=['lc'])
@@ -297,6 +323,7 @@ def create_dataset(df,
                     f"\nThe 'Class' column couldn't be inferred from the catalog and the 'label'" 
                     f"\nparameter is {label} . Please provide a 'Class' column to the catalog or define" 
                     f"\nthe 'label' parameter.")
+
         # ====================================================================
         # 
         # First, ensure that both arguments are not provided at the same time to avoid confusion.
@@ -356,6 +383,3 @@ def create_dataset(df,
     K.clear_session()
     # Explicitly call the garbage collector
     gc.collect()
-            
-   
-
