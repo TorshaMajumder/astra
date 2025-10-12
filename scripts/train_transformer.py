@@ -59,9 +59,9 @@ def contrastive_training(args):
             config[key] = value
 
     # --- You now have your final configuration in the `config` dictionary ---
-    print("--- Final Configuration ---")
-    pprint.pprint(config)
-    print("-------------------------")
+    # print("--- Final Configuration ---")
+    # pprint.pprint(config)
+    # print("-------------------------")
 
 
     # --- Setup Paths and TensorBoard Writer ---
