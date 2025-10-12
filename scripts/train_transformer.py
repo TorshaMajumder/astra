@@ -1,11 +1,15 @@
 
-import tensorflow as tf
+
 import os
 import json
-import datetime # Import datetime
+import yaml
+import pprint
 import logging
-from astra.src.transformer import AstroTransformer, train
-from astra.bands.bands import ztf_band
+import datetime 
+import argparse
+import tensorflow as tf
+from astra.src.transformer import AstroTransformer, contrastive_train
+
 
 try:
     import psutil
@@ -30,81 +34,72 @@ tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
-def main():
 
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+def clustered_training():
+    pass
 
-    # --- Main Execution ---
+def contrastive_training(args):
+    
+    # 2. Load the YAML configuration file
+    try:
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"Error: Configuration file not found at {args.config}")
+        return
+    except Exception as e:
+        print(f"Error loading YAML file: {e}")
+        return
 
-    # Redefine parameters if needed (moved some defaults into train function)
-    temperature = 0.1 # Often lower temperature works better
-    patience = 100 # Adjust as needed
-    epochs = 2 # Train longer
-    # lr = 1e-4 # Use initial_lr in train function if not using schedule
-    batch_size=300 # Adjust based on GPU memory
+    # 3. Override config with command-line arguments if they were provided
+    # This loop checks if any command-line argument was given a value (is not None)
+    # and updates the config dictionary with it.
+    for key, value in vars(args).items():
+        if value is not None and key != 'config':
+            config[key] = value
 
-    # Aug parameters
-    apply_white_noise = (True, False, True) # Anchor, Positive, Negative
-    # noise_levels = (0.0, 0.1, 0.2) # Noise level for each view
-    apply_binning = (False, False, True) # Apply binning? (Masking based on time bins)
-    apply_outlier = (False, False, True) # Apply photometric outlier?
-    # maxlens = (300, 150, 300) # Sequence lengths for Anchor, Positive, Negative
-    maxlens = ({'g': 300, 'r': 300, 'i': 300}, {'g': 150, 'r': 150, 'i': 150}, {'g': 300, 'r': 300, 'i': 300}) # Dict of maxlens per band for each view
-    bin_widths = (5, 5, 5) # Bin width in days for binning augmentation
-    drop_rates = (0.0, 0.0, 0.50) # Fraction of bins/data to drop for binning/masking
-    noise_levels = (0.10, 0.0, 0.10) # Fraction of bins/data to drop for binning/masking
-    path_to_read = "dataset/cepheids/train/" # Make sure this path is correct and mounted
-    path_to_val = "dataset/cepheids/val/" # Make sure this path is correct and mounted
-    path_to_save = "contrastive_loss_res/" # Save path for model checkpoints
+    # --- You now have your final configuration in the `config` dictionary ---
+    print("--- Final Configuration ---")
+    pprint.pprint(config)
+    print("-------------------------")
 
-    # Model Parameters
-    num_layers = 4 # Deeper model?
-    mjd = True # Use MJD for positional encoding
-    base = 10000.0
-    d_model = 256 # Smaller embed dim?
-    num_heads = 4
-    dff = 1024 # Feed-forward dim
-    rate = 0.1 # Dropout rate
-    use_band_info = True
-    use_drop = True
-    projection_dim = 128 # Add projection head (recommended for SimCLR)
-    initial_lr = 1e-4 # Initial learning rate if not using schedule
-    use_custom_schedule = True # Use learning rate schedule with AdamW
-    warmup_steps = 4000 # Warmup steps for learning rate schedule
-    buffer_size = 10000 # Buffer size for shuffling
 
     # --- Setup Paths and TensorBoard Writer ---
     run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_log_dir = None
-    if path_to_save:
+    if config['path_to_save']:
         # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
-        run_log_dir = os.path.join(path_to_save, f"run_{run_timestamp}")
+        run_log_dir = os.path.join(config['path_to_save'], f"run_{run_timestamp}")
         os.makedirs(run_log_dir, exist_ok=True)
         summary_writer = tf.summary.create_file_writer(run_log_dir)
         print(f"\n\nSaved all the parameters in: {run_log_dir}")
+
     # --- 1. Collect and Log Hyperparameters ---
     hparams = {
             "run_timestamp": run_timestamp,
             "model_params": {
-                "num_layers": num_layers, "d_model": d_model, "num_heads": num_heads,
-                "dff": dff, "projection_dim": projection_dim, "rate": rate, "mjd": mjd,
-                "use_band_info": use_band_info, "base": base, "use_drop": use_drop
+                "num_layers": config['num_layers'], "d_model": config['d_model'], "num_heads": config['num_heads'],
+                "dff": config['dff'], "projection_dim": config['projection_dim'], "rate": config['rate'], "mjd": config['mjd'],
+                "use_band_info": config['use_band_info'], "base": config['base'], "use_drop": config['use_drop']
             },
             "training_params": {
-             "epochs": epochs, "patience": patience, "initial_lr": initial_lr,
-             "use_custom_schedule": use_custom_schedule, "warmup_steps": warmup_steps,
-             "temperature": temperature, "batch_size": batch_size,
-        },
-        "data_params": {
-            "buffer_size": buffer_size,
-            "apply_white_noise": list(apply_white_noise), # Convert tuples to lists for JSON
-            "noise_levels": list(noise_levels),
-            "apply_binning": list(apply_binning), "apply_outlier": list(apply_outlier),
-            "maxlens": list(maxlens), "bin_widths": list(bin_widths), "drop_rates": list(drop_rates),
-            "path_to_read": path_to_read, "path_to_val": path_to_val, "path_to_save": run_log_dir
+                "epochs": config['epochs'], "patience": config['patience'], "initial_lr": config['initial_lr'],
+                "use_custom_schedule": config['use_custom_schedule'], "warmup_steps": config['warmup_steps'],
+                "temperature": config['temperature'], "batch_size": config['batch_size']
+            },
+            "data_params": {
+                "buffer_size": config['buffer_size'],
+                "apply_white_noise": config['apply_white_noise'], 
+                "noise_levels": config['noise_levels'],
+                "apply_binning": config['apply_binning'], 
+                "apply_outlier": config['apply_outlier'],
+                "maxlens": config['maxlens'], "bin_widths": config['bin_widths'], 
+                "drop_rates": config['drop_rates'],
+                "path_to_read": config['path_to_read'], "path_to_val": config['path_to_val'], 
+                "path_to_save": run_log_dir
+            }
         }
-    }
-
+    
     if summary_writer: # Log hparams if writer exists
         # Convert the dictionary to a nicely formatted string
         hparams_string = f"<pre>{json.dumps(hparams, indent=1)}</pre>"
@@ -113,6 +108,7 @@ def main():
             tf.summary.text("hyperparameters", hparams_string, description="Hyperparameters for this run")
         summary_writer.flush() # Write immediately
         summary_writer.close() # Close the writer to free resources
+
 
     # Instantiate Model
     model = AstroTransformer(
@@ -133,18 +129,19 @@ def main():
     # --- Build the model with a dummy call (still recommended) ---
     print("\n\nBuilding model with dummy input...")
     # Use the expected sequence length AFTER sliding_window for the anchor view
-    build_seq_len = sum(maxlens[0].values()) # e.g., 12 or 200 depending on strategy
+    build_seq_len = sum(config['maxlens'][0].values()) # e.g., 12 or 200 depending on strategy
     dummy_input = {
         'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
         'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
         'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
         'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
     }
+
     _ = model(dummy_input,  training=False)
     model.summary()
 
     # Start Training
-    train_loss_history,  val_loss_history = train(
+    train_loss_history,  val_loss_history = contrastive_train(
                                                     model,
                                                     path_to_read=hparams["data_params"]["path_to_read"],
                                                     path_to_val=hparams["data_params"]["path_to_val"],
@@ -166,5 +163,36 @@ def main():
                                                     buffer_size=hparams["data_params"]["buffer_size"],
                                                 )
 
-if __name__ == "__main__":
+
+
+def main():
+    # 1. Set up the Argument Parser
+    # We only need ONE argument now: the path to the config file.
+    parser = argparse.ArgumentParser(prog='astra-transformer',
+                                    description="Train ASTRA transformer model")
+    
+    # The config file argument is required.
+    parser.add_argument('--loss', type=str, required=True, help='Provide the loss function as contrastive or clustering.')
+    # The config file argument is required.
+    parser.add_argument('--config', type=str, required=True, help='Path to the YAML configuration file.')
+    
+    # We can also add arguments here that we might want to override frequently.
+    # For example, to quickly run a test for fewer epochs.
+    parser.add_argument('--epochs', type=int, help='Override the number of epochs from the config file.')
+    parser.add_argument('--batch_size', type=int, help='Override the batch size from the config file.')
+
+    args = parser.parse_args()
+
+    if args.loss == "contrastive":
+        contrastive_training(args)
+    
+    elif args.loss == "clustering":
+        clustered_training(args)
+    
+    else:
+        pass
+
+    
+
+if __name__ == '__main__':
     main()

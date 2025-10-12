@@ -33,7 +33,7 @@ Homepage = 'https://your-package-url.com' # Project URL
 
 [project.scripts]
 astra-data = "scripts.generate_data:main" # Entry point for astra-data
-astra-transformer = "scripts.training:main" # Entry point for astra-transformer
+astra-transformer = "scripts.train_transformer:main" # Entry point for astra-transformer
 
 
 [tool.setuptools]
