@@ -1,0 +1,46 @@
+# config.yaml
+
+# --- Data Paths ---
+path_to_read: "dataset/cepheids/train/"
+path_to_val: "dataset/cepheids/val/"
+path_to_save: "contrastive_loss_res/"
+
+# --- Training Hyperparameters ---
+temperature: 0.1      # Contrastive loss temperature
+patience: 100         # Early stopping patience
+epochs: 2             # Number of training epochs
+batch_size: 300       # Batch size (adjust based on GPU memory)
+
+# --- Augmentation Parameters (Anchor, Positive, Negative) ---
+apply_white_noise: [True, False, True]   # Add white noise
+noise_levels : [0.10, 0.0, 0.10]         # Noise level for each view
+apply_binning: [False, False, True]
+apply_outlier: [False, False, True]
+# Sequence lengths for Anchor, Positive, Negative
+maxlens:
+  - {'g': 300, 'r': 300, 'i': 300}  # Anchor
+  - {'g': 150, 'r': 150, 'i': 150}  # Positive
+  - {'g': 300, 'r': 300, 'i': 300}  # Negative
+bin_widths: [5, 5, 5]
+drop_rates: [0.0, 0.0, 0.50]
+
+# --- Transformer Model Parameters ---
+num_layers: 4
+mjd: True           # Use MJD for positional encoding
+base: 10000.0
+d_model: 256
+num_heads: 4
+dff: 1024           # Feed-forward network dimension
+rate: 0.1           # Dropout rate
+use_band_info: True
+use_drop: True
+projection_dim: 128   # Projection head dimension for SimCLR
+
+# --- Optimizer and Scheduler ---
+initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
+#lr = 1e-4            # Use initial_lr in train function if not using schedule. 
+use_custom_schedule: True
+warmup_steps: 4000
+buffer_size: 10000    # Shuffle buffer size
+
+                      

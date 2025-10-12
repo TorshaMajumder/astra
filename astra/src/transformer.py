@@ -101,7 +101,7 @@ class AstroTransformer(tf.keras.Model):
 
 
 @tf.function
-def train_step(model, anchor_batch, positive_batch, negative_batch, temperature, optimizer):
+def contrastive_train_step(model, anchor_batch, positive_batch, negative_batch, temperature, optimizer):
     # anchor_batch, positive_batch, negative_batch are dictionaries from the data loader
     batch_size = tf.shape(list(anchor_batch.values())[0])[0] # Get batch size from first tensor
 
@@ -130,7 +130,7 @@ def train_step(model, anchor_batch, positive_batch, negative_batch, temperature,
 
 
 @tf.function
-def validation_step(model, anchor_batch, positive_batch, negative_batch, temperature):
+def contrastive_validation_step(model, anchor_batch, positive_batch, negative_batch, temperature):
    
     z_anchor = model(anchor_batch, training=False)   # (B, D)
     z_positive = model(positive_batch, training=False) # (B, D)
@@ -147,7 +147,7 @@ def validation_step(model, anchor_batch, positive_batch, negative_batch, tempera
     return loss
 
 
-def train(model,
+def contrastive_train(model,
           path_to_read="",
           path_to_val="",
           path_to_save=None,
@@ -266,7 +266,7 @@ def train(model,
         
         for step, (anchor, positive, negative) in enumerate(pbar_train):
             try:
-                train_loss = train_step(model, anchor, positive, negative, temperature, optimizer)
+                train_loss = contrastive_train_step(model, anchor, positive, negative, temperature, optimizer)
                 step_wise_train_loss.append(train_loss.numpy()) # Get numpy value
                 
             except Exception as e:
@@ -297,7 +297,7 @@ def train(model,
         
             for step, (anchor, positive, negative) in enumerate(pbar_val):
                 try:
-                    val_loss = validation_step(model, anchor, positive, negative, temperature)
+                    val_loss = contrastive_validation_step(model, anchor, positive, negative, temperature)
                     step_wise_val_loss.append(val_loss.numpy()) # Get numpy value
                     
                 except Exception as e:
