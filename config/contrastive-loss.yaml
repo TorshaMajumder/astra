@@ -1,9 +1,9 @@
 # config.yaml
 
 # --- Data Paths ---
-path_to_read: "dataset/cepheids/train/"
-path_to_val: "dataset/cepheids/val/"
-path_to_save: "contrastive_loss_res/"
+path_to_read: "../dataset/cepheids/train/"
+path_to_val: "../dataset/cepheids/val/"
+path_to_save: "../contrastive_loss_res/"
 
 # --- Training Hyperparameters ---
 temperature: 0.1      # Contrastive loss temperature

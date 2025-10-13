@@ -25,6 +25,10 @@ astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/z
 ```
 astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/zubercal_vcep --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200 --keep_label ACEP DCEP T2CEP
 ```
+## Training ASTRA framework with "Contrastive loss"
+```
+astra-transformer --loss contrastive --config /home/torsha/workplace/git/astra/config/contrastive-loss.yaml --epoch 100 --batch_size 300
+```
 ## For more help!
 ```
 astra-data --help

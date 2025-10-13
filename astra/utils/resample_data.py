@@ -136,11 +136,11 @@ if __name__ == '__main__':
     # 
     # Define the source directory of your large, partitioned dataset
     #
-    SOURCE_DATASET_DIR = 'dataset/multi-class'
+    SOURCE_DATASET_DIR = '../dataset/multi-class'
     #
     # Define the target directory where the new, smaller dataset will be saved
     #
-    TARGET_DATASET_DIR = 'dataset/resampled_multi-class'
+    TARGET_DATASET_DIR = '../dataset/resampled_multi-class'
     #
     # Define your sampling configuration
     #    
