@@ -409,6 +409,7 @@ def augmentation(data,
     return input_seq
 
 def contrastive_data_loader(source,
+                            n_views=3,
                             seed=1024,
                             batch_size=100,
                             apply_white_noise=(False, True, True), 
@@ -444,11 +445,11 @@ def contrastive_data_loader(source,
 #     """
     """Creates a tf.data.Dataset yielding (anchor, positive, negative) batches."""
     
-    num_views = 3 # Anchor, Positive, Negative
+    # n_views = 3 # Anchor, Positive, Negative
 
     # Basic validation
-    if not all(len(arg) == num_views for arg in [apply_white_noise, apply_binning, apply_outlier, maxlens, bin_widths, drop_rates]):
-         raise ValueError("\n\nLength of all augmentation parameter lists/tuples must match num_views (3).")
+    if not all(len(arg) == n_views for arg in [apply_white_noise, apply_binning, apply_outlier, maxlens, bin_widths, drop_rates]):
+         raise ValueError(f"\n\nLength of all augmentation parameter lists/tuples must match n_views {n_views}.")
 
     # --- File Discovery using Glob Pattern ---
     glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
@@ -479,7 +480,7 @@ def contrastive_data_loader(source,
     # dataset = dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
 
     loaders = []
-    for i in range(num_views):
+    for i in range(n_views):
         # Using lambda function with default arguments to capture loop variables correctly
         aug_fn = lambda data, idx=i: augmentation(data,
                                                    apply_white_noise=apply_white_noise[idx],

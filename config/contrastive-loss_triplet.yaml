@@ -5,6 +5,10 @@ path_to_read: "../dataset/cepheids/train/"
 path_to_val: "../dataset/cepheids/val/"
 path_to_save: "../contrastive_loss_res/"
 
+# --- Architecture ---
+n_views: 3            # Anchor, Positive, Negative --- Triplet ---
+# n_views: 2            # Anchor, Positive --- Siamese ---
+
 # --- Training Hyperparameters ---
 temperature: 0.1      # Contrastive loss temperature
 patience: 100         # Early stopping patience
@@ -18,9 +22,9 @@ apply_binning: [False, False, True]
 apply_outlier: [False, False, True]
 # Sequence lengths for Anchor, Positive, Negative
 maxlens:
-  - {'g': 300, 'r': 300, 'i': 300}  # Anchor
-  - {'g': 150, 'r': 150, 'i': 150}  # Positive
-  - {'g': 300, 'r': 300, 'i': 300}  # Negative
+  - {'g': 100, 'r': 150, 'i': 50}  # Anchor
+  - {'g': 50, 'r': 75, 'i': 25}  # Positive
+  - {'g': 100, 'r': 150, 'i': 50}  # Negative
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
 

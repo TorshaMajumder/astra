@@ -1,15 +1,13 @@
 import os
 import logging
 import traceback
-import datetime # Import datetime
-import itertools
+import datetime 
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras import layers
 from astra.src.encoder   import Encoder
-from astra.src.loss import nt_xent_loss_3views 
-from tensorflow.keras.optimizers import Adam
+from astra.src.loss import nt_xent_loss 
 from astra.src.embedding import TimeSeriesEmbedding
 from astra.src.header import ProjectionHead
 from astra.src.preprocessing import contrastive_data_loader
@@ -101,18 +99,29 @@ class AstroTransformer(tf.keras.Model):
 
 
 @tf.function
-def contrastive_train_step(model, anchor_batch, positive_batch, negative_batch, temperature, optimizer):
-    # anchor_batch, positive_batch, negative_batch are dictionaries from the data loader
-    batch_size = tf.shape(list(anchor_batch.values())[0])[0] # Get batch size from first tensor
+def contrastive_train_step(model, *views_batch, temperature, optimizer):
+    """
+    Performs a single training step for a variable number of views.
+
+    Args:
+        model: The Keras model to train.
+        *views_batch: A variable number of view batches (e.g., anchor_batch, positive_batch).
+                      Each view is a dictionary of tensors from the data loader.
+        temperature: The temperature for the NT-XENT loss.
+        optimizer: The optimizer to use.
+    
+    Returns:
+        The calculated loss for the step.
+    """
+    
 
     with tf.GradientTape() as tape:
         
-        z_anchor = model(anchor_batch, training=True)   # (B, D)
-        z_positive = model(positive_batch, training=True) # (B, D)
-        z_negative = model(negative_batch, training=True) # (B, D)
+        
+        z_views = [model(view, training=True) for view in views_batch] # List of (B, D) tensors
 
         # Calculate NT-XENT loss between anchor and positive views
-        loss = nt_xent_loss_3views(z_anchor, z_positive, z_negative, temperature)
+        loss = nt_xent_loss(*z_views, temperature=temperature)
 
         # Handle potential NaN/Inf loss
         if tf.math.is_nan(loss) or tf.math.is_inf(loss):
@@ -130,14 +139,13 @@ def contrastive_train_step(model, anchor_batch, positive_batch, negative_batch, 
 
 
 @tf.function
-def contrastive_validation_step(model, anchor_batch, positive_batch, negative_batch, temperature):
+def contrastive_validation_step(model, *views_batch, temperature):
    
-    z_anchor = model(anchor_batch, training=False)   # (B, D)
-    z_positive = model(positive_batch, training=False) # (B, D)
-    z_negative = model(negative_batch, training=False) # (B, D)
+    
+    z_views = [model(view, training=True) for view in views_batch] # List of (B, D) tensors
 
     # Calculate NT-XENT loss between anchor and positive views
-    loss = nt_xent_loss_3views(z_anchor, z_positive, z_negative, temperature)
+    loss = nt_xent_loss(*z_views, temperature=temperature)
 
     # Handle potential NaN/Inf loss
     if tf.math.is_nan(loss) or tf.math.is_inf(loss):
@@ -151,6 +159,7 @@ def contrastive_train(model,
           path_to_read="",
           path_to_val="",
           path_to_save=None,
+          n_views=3,
           batch_size=50,
           temperature=0.1, # Default from SimCLR
           patience=20,
@@ -174,9 +183,7 @@ def contrastive_train(model,
     summary_writer = None
 
     if path_to_save:
-        # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
-        # run_log_dir = os.path.join(path_to_save, f"run_{run_timestamp}")
-        # os.makedirs(run_log_dir, exist_ok=True)
+       
 
         weights_filename = 'best_contrastive.weights.h5' # Simpler name within run dir
         best_weights_path = os.path.join(path_to_save, weights_filename)
@@ -203,6 +210,7 @@ def contrastive_train(model,
     try:
         train_loader = contrastive_data_loader(
             source=path_to_read,
+            n_views=n_views, 
             seed=np.random.randint(1024), 
             batch_size=batch_size,
             apply_white_noise=apply_white_noise,
@@ -229,6 +237,7 @@ def contrastive_train(model,
         try:
             valid_loader = contrastive_data_loader(
                 source=path_to_val,
+                n_views=n_views, 
                 seed=np.random.randint(1024), # Use different seed maybe?
                 batch_size=batch_size,
                 apply_white_noise=apply_white_noise,
@@ -264,9 +273,9 @@ def contrastive_train(model,
         
         pbar_train = tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}', leave=False)
         
-        for step, (anchor, positive, negative) in enumerate(pbar_train):
+        for step, views in enumerate(pbar_train):
             try:
-                train_loss = contrastive_train_step(model, anchor, positive, negative, temperature, optimizer)
+                train_loss = contrastive_train_step(model, *views, temperature=temperature, optimizer=optimizer)
                 step_wise_train_loss.append(train_loss.numpy()) # Get numpy value
                 
             except Exception as e:
@@ -295,9 +304,9 @@ def contrastive_train(model,
             model.trainable = False # Set model to non-trainable for validation
             pbar_val = tqdm(valid_loader, desc=f'Epoch {epoch + 1}/{epochs} (Val)', leave=False)
         
-            for step, (anchor, positive, negative) in enumerate(pbar_val):
+            for step, views in enumerate(pbar_val):
                 try:
-                    val_loss = contrastive_validation_step(model, anchor, positive, negative, temperature)
+                    val_loss = contrastive_validation_step(model, *views, temperature=temperature)
                     step_wise_val_loss.append(val_loss.numpy()) # Get numpy value
                     
                 except Exception as e:

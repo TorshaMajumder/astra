@@ -78,6 +78,7 @@ def contrastive_training(args):
     hparams = {
             "run_timestamp": run_timestamp,
             "model_params": {
+                "n_views": config['n_views'], 
                 "num_layers": config['num_layers'], "d_model": config['d_model'], "num_heads": config['num_heads'],
                 "dff": config['dff'], "projection_dim": config['projection_dim'], "rate": config['rate'], "mjd": config['mjd'],
                 "use_band_info": config['use_band_info'], "base": config['base'], "use_drop": config['use_drop']
@@ -146,6 +147,7 @@ def contrastive_training(args):
                                                     path_to_read=hparams["data_params"]["path_to_read"],
                                                     path_to_val=hparams["data_params"]["path_to_val"],
                                                     path_to_save=hparams["data_params"]["path_to_save"],
+                                                    n_views=hparams["model_params"]["n_views"],
                                                     batch_size=hparams["training_params"]["batch_size"],
                                                     temperature=hparams["training_params"]["temperature"],
                                                     patience=hparams["training_params"]["patience"],
