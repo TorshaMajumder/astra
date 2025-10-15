@@ -22,9 +22,9 @@ apply_binning: [False, False, True]
 apply_outlier: [False, False, True]
 # Sequence lengths for Anchor, Positive, Negative
 maxlens:
-  - {'g': 100, 'r': 150, 'i': 50}  # Anchor
-  - {'g': 50, 'r': 75, 'i': 25}  # Positive
-  - {'g': 100, 'r': 150, 'i': 50}  # Negative
+  - {'g': 200, 'r': 250, 'i': 50}  # Anchor
+  - {'g': 100, 'r': 125, 'i': 25}  # Positive
+  - {'g': 200, 'r': 250, 'i': 50}  # Negative
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
 
