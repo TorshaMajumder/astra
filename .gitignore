@@ -9,6 +9,9 @@ astra/.DS_Store
 dataset/
 data/
 
+# Config files
+config/
+
 # Notebooks
 notebooks/overall_label_counts.csv
 notebooks/test_data_gen.ipynb
