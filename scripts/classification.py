@@ -8,7 +8,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# --- 1. Configuration ---
 
 # Path to the directory where you saved your .npy files for the COMPLETE TEST SET
 PRETRAIN_RUN_DIR = "/media3/majumder/contrastive_loss_res/run_20250826_222245/"

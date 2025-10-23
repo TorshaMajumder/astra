@@ -17,14 +17,14 @@ def finetune_data_loader(source_dir,
                             maxlen=None, # The fixed sequence length the encoder expects
                             threshold=18.0, # Brightness threshold
                             fraction_to_use=0.01, # The fraction of data to use (e.g., 1%)
-                            is_training=True, # Flag to enable shuffling and taking a fraction
+                            is_training=True, # Flag to enable shuffling and taking a fraction for training data
                             apply_white_noise=True): 
     """
     Creates a tf.data.Dataset for fine-tuning by remapping labels,
     filtering by a brightness threshold, and taking a subset of candidates.
     """
     
-    glob_pattern = os.path.join(source_dir, 'partition_*', '*', 'chunk_*.record')
+    glob_pattern = os.path.join(source_dir, '*', 'chunk_*.record')
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=is_training)
 
     # --- Helper function to remap labels and check the threshold ---
@@ -76,6 +76,11 @@ def finetune_data_loader(source_dir,
     # Filter to get only the candidates
     candidate_dataset = initial_dataset.filter(lambda d, l, is_c: is_c)
 
+    # CRITICAL: Cache the full candidate dataset. This avoids re-reading from disk
+    # for every class and is essential for performance.
+    print("Caching all candidates for efficient processing. This may take a moment...")
+    candidate_dataset = candidate_dataset.cache()
+
     # Count the candidates. This will iterate through the dataset once.
     candidate_count = candidate_dataset.reduce(np.int64(0), lambda x, _: x + 1)
     print(f"Found {candidate_count} total candidate objects brighter than magnitude {threshold}.")
@@ -87,9 +92,60 @@ def finetune_data_loader(source_dir,
     if is_training and fraction_to_use < 1.0:
         subset_size = int(tf.cast(candidate_count, tf.float32) * fraction_to_use)
         print(f"Using {fraction_to_use*100:.1f}% of candidates for training: {subset_size} samples.")
+        num_classes = len(label_map)
+        # Calculate how many samples to aim for from each class
+        samples_per_class = subset_size // num_classes
+        print(f"Targeting {subset_size} total samples, with roughly {samples_per_class} per class.")
+        
+        subset_datasets = []
+        # For each class, create a filtered, shuffled, and limited dataset
+        for class_name_str in label_map.keys():
+            class_name_bytes = tf.constant(class_name_str.encode('utf-8'), dtype=tf.string)
 
-        # Shuffle all candidates, then take the subset
-        final_dataset = candidate_dataset.shuffle(buffer_size=tf.cast(candidate_count, tf.int64)).take(subset_size)
+            # Filter the cached dataset for the current class
+            class_ds = candidate_dataset.filter(lambda d, l, is_c: l == class_name_bytes)
+
+            # Count how many candidates are available for this class
+            available_count = class_ds.reduce(np.int64(0), lambda x, _: x + 1).numpy()
+
+            # Take the smaller of the target count or the available count
+            num_to_take = min(samples_per_class, available_count)
+
+            print(f" - Class '{class_name_str}': Found {available_count} candidates, taking {num_to_take}.")
+
+            # Shuffle and take the target number of samples
+            class_subset = class_ds.shuffle(buffer_size=available_count).take(num_to_take)
+            subset_datasets.append(class_subset)
+
+        # --- Combine the balanced subsets into a single dataset ---
+        # Check if any subsets were actually created
+        if not subset_datasets:
+            # If no data was found for any class, return an empty dataset
+            # We get the structure from the original candidate_dataset to be safe
+            final_dataset = tf.data.Dataset.from_generator(
+                lambda: None, output_signature=candidate_dataset.element_spec
+            )
+        else:
+            # ** THE FIX IS HERE **
+            # 1. Take the first subset as the starting point
+            final_dataset = subset_datasets[0]
+            
+            # 2. Loop through the REST of the subsets and concatenate them
+            for ds in subset_datasets[1:]:
+                final_dataset = final_dataset.concatenate(ds)
+
+
+        
+        # Combine the balanced subsets into a single dataset
+        # We start with an empty dataset and concatenate each subset onto it.
+        # final_dataset = tf.data.Dataset.from_tensor_slices([])
+        # for ds in subset_datasets:
+        #     final_dataset = final_dataset.concatenate(ds)
+    
+    
+    
+    
+    
     else:
         # For validation, use all candidates found
         final_dataset = candidate_dataset
@@ -98,7 +154,7 @@ def finetune_data_loader(source_dir,
 
     # --- Helper function to do final preprocessing for the model ---
     # Create the lookup table for the FINAL mapped labels
-    keys_tensor = tf.constant(list(label_map.keys()))
+    keys_tensor = tf.constant([k.encode('utf-8') for k in label_map.keys()])
     vals_tensor = tf.constant(list(label_map.values()))
     table = tf.lookup.StaticHashTable(
         tf.lookup.KeyValueTensorInitializer(keys_tensor, vals_tensor), default_value=-1
@@ -161,7 +217,7 @@ def finetune_data_loader(source_dir,
     
     if is_training:
         # Shuffle the small subset again for good measure
-        final_dataset = final_dataset.shuffle(buffer_size=1000)
+        final_dataset = final_dataset.shuffle(buffer_size=10000)
         # *** ADD .repeat() HERE for the training set ***
         final_dataset = final_dataset.repeat() # Loop the small dataset indefinitely
 
@@ -246,3 +302,6 @@ def finetune_model(encoder_model,
     finetune_model = tf.keras.Model(inputs=inputs, outputs=outputs, name="ASTRA_Classifier")
 
     return finetune_model
+
+
+

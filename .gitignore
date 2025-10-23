@@ -90,4 +90,5 @@ setup.py
 ## Remove any other files
 astra/utils/test.py
 scripts/test.py
+scripts/ft.py
 
