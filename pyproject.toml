@@ -41,6 +41,10 @@ gpu = [
     "tensorflow[and-cuda]"
 ]
 
+cpu = [
+    "tensorflow"
+]
+
 
 [tool.setuptools]
 packages = ["astra", "scripts"] # Explicitly list your packages.  find_packages() is default, but good to be explicit.
