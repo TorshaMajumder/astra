@@ -5,8 +5,12 @@
 >> cd astra
 >> python3 -m venv venv
 >> source venv/bin/activate
->> python3 -m pip install -e .
 >> pip install -r requirements.txt
+## For CPU users
+>> python3 -m pip install -e .[cpu]   
+## For GPU users
+>> python3 -m pip install -e .[gpu]   
+
 ```
 ## Creating Tensor Records
 ### When LSBD contain a "Class" column for labels
