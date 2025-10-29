@@ -87,6 +87,10 @@ venv*/
 ## Remove setup.py
 setup.py
 
+## Remove requirements.in
+requirements.in
+
+
 ## Remove any other files
 astra/utils/test.py
 scripts/test.py

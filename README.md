@@ -5,11 +5,12 @@
 >> cd astra
 >> python3 -m venv venv
 >> source venv/bin/activate
->> pip install -r requirements.txt
+## Optional upgrade
+>> pip install --upgrade pip setuptools wheel pip-tools
 ## For CPU users
->> python3 -m pip install -e .[cpu]   
+>> pip install -e .  
 ## For GPU users
->> python3 -m pip install -e .[gpu]   
+>> pip install -e .[gpu]   
 
 ```
 ## Creating Tensor Records
@@ -31,9 +32,10 @@ astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/z
 ```
 ## Training ASTRA framework with "Contrastive loss"
 ```
-astra-transformer --loss contrastive --config ../config/contrastive-loss.yaml --epoch 100 --batch_size 300
+astra-transformer --loss contrastive --config ../config/contrastive-loss_triplet.yaml --epoch 100 --batch_size 300
 ```
 ## For more help!
 ```
 astra-data --help
+astra-transformer --help
 ```
