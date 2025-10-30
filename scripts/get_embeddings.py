@@ -4,10 +4,10 @@ import numpy as np
 import os
 from tqdm import tqdm # Or standard tqdm
 import pandas as pd
-from astra.src.transformer import AstroTransformer
+from astra.src.transformer import AstraNet
 from astra.src.preprocessing import create_inference_loader
 from astra.utils.helper import load_hparams_from_event_file
-from astra.src.embedding import TimeSeriesEmbedding
+from astra.src.embedding import AstraEmbedding
 from astra.src.encoder import Encoder
 
 
@@ -22,15 +22,15 @@ if model_params is None:
 # --- Step 1: Re-define your Model and all its custom sub-layers ---
 # You MUST have the exact definitions of all the classes used to build the model.
 # Paste the final, correct versions of all these classes here:
-# - TimeSeriesEmbedding
+# - AstraEmbedding
 # - EncoderLayer
 # - Encoder
 # - ProjectionHead (though we won't use it, it's needed to build the full model first)
-# - AstroTransformer
+# - AstraNet
 # - All helper functions like standardize, sliding_window/get_window, deserialize.
 
 # Example placeholder (REPLACE WITH YOUR ACTUAL CLASS DEFINITIONS)
-# from your_module import AstroTransformer, TimeSeriesEmbedding, ...
+# from your_module import AstraNet, AstraEmbedding, ...
 # from your_data_utils import create_inference_loader, ...
 
 # --- Step 2: Define the EXACT Hyperparameters of the Saved Model ---
@@ -45,8 +45,8 @@ if model_params is None:
 # use_band_info = True
 # use_embedding_dropout = True
 # --- 2. Instantiate the Full Model using Loaded HParams ---
-print("\n2. Re-creating the full AstroTransformer architecture using loaded HParams...")
-model = AstroTransformer(**model_params)
+print("\n2. Re-creating the full AstraNet architecture using loaded HParams...")
+model = AstraNet(**model_params)
 print("   Model instantiated.")
 
 

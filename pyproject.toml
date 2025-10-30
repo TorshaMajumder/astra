@@ -29,7 +29,7 @@ Homepage = 'https://your-package-url.com' # Project URL
 
 [project.scripts]
 astra-data = "scripts.generate_data:main" # Entry point for astra-data
-astra-transformer = "scripts.train_transformer:main" # Entry point for astra-transformer
+astra-net = "scripts.train_model:main" # Entry point for astra-transformer
 
 [project.optional-dependencies]
 gpu = [

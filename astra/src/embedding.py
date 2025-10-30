@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 
-class TimeSeriesEmbedding(layers.Layer):
+class AstraEmbedding(layers.Layer):
 
   """
   Embeds time series data using sequential, segment, and positional encodings.
@@ -28,8 +28,8 @@ class TimeSeriesEmbedding(layers.Layer):
   -----------------------------------------------------------------------------------------------------------------
       tf.Tensor: Embedded time series data.
   """
-  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, mjd=True):
-    super(TimeSeriesEmbedding, self).__init__()
+  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, name="astra_embedding",mjd=True):
+    super(AstraEmbedding, self).__init__()
 
     self.mjd = mjd
     self.base = base

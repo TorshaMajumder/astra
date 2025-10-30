@@ -8,7 +8,7 @@ import logging
 import datetime 
 import argparse
 import tensorflow as tf
-from astra.src.transformer import AstroTransformer, contrastive_train
+from astra.src.transformer import AstraNet, contrastive_train
 
 
 try:
@@ -112,7 +112,7 @@ def contrastive_training(args):
 
 
     # Instantiate Model
-    model = AstroTransformer(
+    model = AstraNet(
         num_layers=hparams["model_params"]["num_layers"],
         d_model=hparams["model_params"]["d_model"],
         base=hparams["model_params"]["base"],

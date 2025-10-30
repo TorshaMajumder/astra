@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.keras import layers
 from astra.src.encoder   import Encoder
 from astra.src.loss import nt_xent_loss 
-from astra.src.embedding import TimeSeriesEmbedding
+from astra.src.embedding import AstraEmbedding
 from astra.src.header import ProjectionHead
 from astra.src.preprocessing import contrastive_data_loader
 from astra.src.scheduler import CustomSchedule, warmup_schedule
@@ -18,16 +18,16 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)
 os.system('clear')
 
 
-class AstroTransformer(tf.keras.Model):
+class AstraNet(tf.keras.Model):
     def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1,
                  base=10000.0, use_res=True, use_band_info=True,
-                 use_drop=False, mjd=True, projection_dim=None, name="astro_transformer", **kwargs):
-        super(AstroTransformer, self).__init__(name=name, **kwargs)
+                 use_drop=False, mjd=True, projection_dim=None, name="astra_net", **kwargs):
+        super(AstraNet, self).__init__(name=name, **kwargs)
 
 
         self.d_model = d_model
         # 1. Instantiate Embedding Layer
-        self.embedding_layer = TimeSeriesEmbedding(
+        self.embedding_layer = AstraEmbedding(
                                                     d_model=d_model, base=base, rate=rate, # Pass shared rate
                                                     use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
                                                 )
@@ -52,7 +52,7 @@ class AstroTransformer(tf.keras.Model):
     
     def call(self, x, training=False):
         """
-        Forward pass through the AstroTransformer.
+        Forward pass through the AstraNet.
 
         Args:
             x (dict): Input dictionary containing:
@@ -74,7 +74,7 @@ class AstroTransformer(tf.keras.Model):
         if len(mask.shape) == 3 and tf.shape(mask)[-1] == 1:
              mask = tf.squeeze(mask, axis=-1)
         elif len(mask.shape) != 2:
-             raise ValueError(f"Unexpected mask shape in AstroTransformer: {tf.shape(mask)}. Expected (batch, seq_len).")
+             raise ValueError(f"Unexpected mask shape in AstraNet: {tf.shape(mask)}. Expected (batch, seq_len).")
 
         # 1. Apply Embedding Layer (takes the dictionary 'x')
         # Pass training flag for potential dropout in embedding

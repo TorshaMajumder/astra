@@ -95,4 +95,5 @@ requirements.in
 astra/utils/test.py
 scripts/test.py
 scripts/ft.py
+scripts/train_transformer.py
 

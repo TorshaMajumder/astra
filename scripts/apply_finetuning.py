@@ -3,7 +3,7 @@ import datetime # Import datetime
 import tensorflow as tf
 import numpy as np
 from astra.src.finetuning import finetune_data_loader, finetune_model
-from astra.src.transformer import AstroTransformer
+from astra.src.transformer import AstraNet
 from astra.utils.helper import load_hparams_from_event_file
 
 # --- Main Fine-tuning Script ---
@@ -48,8 +48,8 @@ model_params, training_params, data_params = load_hparams_from_event_file(run_di
 # Stop if hyperparameters could not be loaded
 if model_params is None:
     raise ValueError("Failed to load hyperparameters from event file. Exiting.")
-print("\n2. Re-creating the full AstroTransformer architecture using loaded HParams...")
-model = AstroTransformer(**model_params)
+print("\n2. Re-creating the full AstraNet architecture using loaded HParams...")
+model = AstraNet(**model_params)
 print("   Model instantiated.")
 
 # Build the model with a dummy input (use any fixed integer length)
