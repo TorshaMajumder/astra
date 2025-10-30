@@ -1,9 +1,9 @@
 # config.yaml
 
 # --- Data Paths ---
-path_to_read: "/home/torsha/workplace/dataset/resampled_multi-class/train/"
-path_to_val: "/home/torsha/workplace/dataset/resampled_multi-class/val/"
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/"
+path_to_read: "../dataset/resampled_multi-class/train/"
+path_to_val: "../dataset/resampled_multi-class/val/"
+path_to_save: "../contrastive_loss_res/"
 
 # --- Architecture ---
 ## Provide n_views=3 for Triplet model/Provide n_views=2 for Siamese model

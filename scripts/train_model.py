@@ -170,8 +170,8 @@ def contrastive_training(args):
 def main():
     # 1. Set up the Argument Parser
     # We only need ONE argument now: the path to the config file.
-    parser = argparse.ArgumentParser(prog='astra-transformer',
-                                    description="Train ASTRA transformer model")
+    parser = argparse.ArgumentParser(prog='astra-net',
+                                    description="Train AstraNet model")
     
     # The config file argument is required.
     parser.add_argument('--loss', type=str, required=True, help='Provide the loss function as contrastive or clustering.')

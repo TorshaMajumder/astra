@@ -178,7 +178,7 @@ def contrastive_train(model,
          ):
 
     # --- Setup Paths and TensorBoard Writer ---
-    run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     best_weights_path = None
     summary_writer = None
 
@@ -261,7 +261,7 @@ def contrastive_train(model,
     es_count = 0
     epoch_wise_train_loss = []
     epoch_wise_val_loss = []
-    print(f"\n\nStarting training run: {run_timestamp} for {epochs} epochs...")
+    print(f"\n\nStarting training run for {epochs} epochs...\n\n")
     global_step_train = 0 # Separate step counters
     global_step_val = 0
 
@@ -284,7 +284,7 @@ def contrastive_train(model,
                  continue # Skip batch
 
             # Log step-wise loss to TensorBoard
-            if summary_writer and global_step_train % 1 == 0: # Log less frequently
+            if summary_writer and global_step_train % 2 == 0: # Log less frequently
                 with summary_writer.as_default(step=global_step_train):
                     tf.summary.scalar('loss/step_train', train_loss.numpy(), description="Training loss per step")
                 # summary_writer.flush()
@@ -292,7 +292,7 @@ def contrastive_train(model,
             global_step_train += 1
 
             # Update progress bar description
-            if step % 1 == 0:
+            if step % 2 == 0:
                 # current_lr = optimizer.lr(optimizer.iterations).numpy() if hasattr(optimizer.lr, '__call__') else optimizer.lr.numpy()
                 current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
                 pbar_train.set_postfix({'Train Loss': f'{train_loss.numpy():.4f}', 'LR': f'{current_lr:.1E}'})
@@ -314,7 +314,7 @@ def contrastive_train(model,
                     continue # Skip batch
 
                 # Log step-wise loss to TensorBoard (optional)
-                if summary_writer and global_step_val % 1 == 0:
+                if summary_writer and global_step_val % 2 == 0:
                     with summary_writer.as_default(step=global_step_val):
                          tf.summary.scalar('loss/step_val', val_loss.numpy())
                     # summary_writer.flush()
