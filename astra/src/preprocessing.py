@@ -452,7 +452,7 @@ def contrastive_data_loader(source,
          raise ValueError(f"\n\nLength of all augmentation parameter lists/tuples must match n_views {n_views}.")
 
     # --- File Discovery using Glob Pattern ---
-    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    glob_pattern = os.path.join(source, '*', 'chunk_*.record')
     print(f"\n\nSearching for TFRecord files using pattern: {glob_pattern}")
     # Keep shuffle=False here; we'll shuffle the dataset elements later
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
@@ -537,7 +537,7 @@ def create_inference_loader(source,
         tf.data.Dataset: A dataset yielding batches of dictionaries.
     """
 
-    glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
+    glob_pattern = os.path.join(source, '*', 'chunk_*.record')
     print(f"Searching for inference files using pattern: {glob_pattern}")
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
 

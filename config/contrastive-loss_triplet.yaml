@@ -1,19 +1,20 @@
 # config.yaml
 
 # --- Data Paths ---
-path_to_read: "../dataset/cepheids/train/"
-path_to_val: "../dataset/cepheids/val/"
-path_to_save: "../contrastive_loss_res/"
+path_to_read: "/home/torsha/workplace/dataset/resampled_multi-class/train/"
+path_to_val: "/home/torsha/workplace/dataset/resampled_multi-class/val/"
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/"
 
 # --- Architecture ---
+## Provide n_views=3 for Triplet model/Provide n_views=2 for Siamese model
 n_views: 3            # Anchor, Positive, Negative --- Triplet ---
 # n_views: 2            # Anchor, Positive --- Siamese ---
 
 # --- Training Hyperparameters ---
 temperature: 0.1      # Contrastive loss temperature
 patience: 100         # Early stopping patience
-epochs: 2             # Number of training epochs
-batch_size: 300       # Batch size (adjust based on GPU memory)
+epochs: 100             # Number of training epochs
+batch_size: 400       # Batch size (adjust based on GPU memory)
 
 # --- Augmentation Parameters (Anchor, Positive, Negative) ---
 apply_white_noise: [True, False, True]   # Add white noise
@@ -22,9 +23,9 @@ apply_binning: [False, False, True]
 apply_outlier: [False, False, True]
 # Sequence lengths for Anchor, Positive, Negative
 maxlens:
-  - {'g': 200, 'r': 250, 'i': 50}  # Anchor
-  - {'g': 100, 'r': 125, 'i': 25}  # Positive
-  - {'g': 200, 'r': 250, 'i': 50}  # Negative
+  - {'g': 100, 'r': 175, 'i': 25}  # Anchor
+  - {'g': 50, 'r': 88, 'i': 13}  # Positive
+  - {'g': 100, 'r': 175, 'i': 25}  # Negative
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
 
