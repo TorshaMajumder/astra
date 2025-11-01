@@ -1,15 +1,17 @@
 import os
+import mlflow
 import logging
 import traceback
 import datetime 
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
+import mlflow.tensorflow
 from tensorflow.keras import layers
 from astra.src.encoder   import Encoder
 from astra.src.loss import nt_xent_loss 
-from astra.src.embedding import AstraEmbedding
 from astra.src.header import ProjectionHead
+from astra.src.embedding import AstraEmbedding
 from astra.src.preprocessing import contrastive_data_loader
 from astra.src.scheduler import CustomSchedule, warmup_schedule
 
@@ -26,6 +28,16 @@ class AstraNet(tf.keras.Model):
 
 
         self.d_model = d_model
+        self.num_layers=num_layers
+        self.num_heads=num_heads
+        self.dff=dff
+        self.rate=rate
+        self.base=base
+        self.use_res=use_res
+        self.use_band_info=use_band_info
+        self.use_drop=use_drop
+        self.mjd=mjd
+        self.projection_dim=projection_dim
         # 1. Instantiate Embedding Layer
         self.embedding_layer = AstraEmbedding(
                                                     d_model=d_model, base=base, rate=rate, # Pass shared rate
@@ -95,7 +107,32 @@ class AstraNet(tf.keras.Model):
 
         return final_output # Return the final output tensor
 
+    # === SOLUTION: Implement get_config ===
+    def get_config(self):
+        # Start with the base class's config.
+        config = super(AstraNet, self).get_config()
+        
+        # Update it with the custom arguments from __init__.
+        config.update({
+            "num_layers": self.num_layers,
+            "d_model": self.d_model,
+            "num_heads": self.num_heads,
+            "dff": self.dff,
+            "rate": self.rate,
+            "base": self.base,
+            "use_res": self.use_res,
+            "use_band_info": self.use_band_info,
+            "use_drop": self.use_drop,
+            "mjd": self.mjd,
+            "projection_dim": self.projection_dim,
+        })
+        return config
 
+    # === SOLUTION: Implement from_config ===
+    @classmethod
+    def from_config(cls, config):
+        # This creates a new instance of the model from the config dictionary.
+        return cls(**config)
 
 
 @tf.function
@@ -177,20 +214,19 @@ def contrastive_train(model,
           buffer_size=100, # Shuffle buffer size
          ):
 
+
     # --- Setup Paths and TensorBoard Writer ---
-    # run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     best_weights_path = None
     summary_writer = None
 
     if path_to_save:
        
-
         weights_filename = 'best_contrastive.weights.h5' # Simpler name within run dir
         best_weights_path = os.path.join(path_to_save, weights_filename)
 
         # Create TensorBoard writer
         summary_writer = tf.summary.create_file_writer(path_to_save)
-        print(f"\n\nRun Directory (Weights & TensorBoard Logs): {path_to_save}")
+        # 
         print(f"\n\nWill save best weights to: {best_weights_path}")
 
     else:
@@ -206,7 +242,7 @@ def contrastive_train(model,
         optimizer = tf.keras.optimizers.Adam(learning_rate=initial_lr)
 
     # Create data loader ONCE before the loop
-    print("Setting up data loader for training...")
+    print("\n\nSetting up data loader for training...\n\n")
     try:
         train_loader = contrastive_data_loader(
             source=path_to_read,
@@ -229,7 +265,7 @@ def contrastive_train(model,
         return None , None # Return None if setup fails
 
     # Create data loader ONCE before the loop
-    print("\n\nSetting up data loader for validation...")
+    print("\n\nSetting up data loader for validation...\n\n")
     if not path_to_val or not os.path.exists(path_to_val):
          print("\n\nWarning: Validation path not provided or does not exist. Skipping validation.")
          valid_loader = None
@@ -265,7 +301,6 @@ def contrastive_train(model,
     global_step_train = 0 # Separate step counters
     global_step_val = 0
 
-    
     for epoch in range(epochs):
         step_wise_train_loss = []
         
@@ -279,15 +314,15 @@ def contrastive_train(model,
                 step_wise_train_loss.append(train_loss.numpy()) # Get numpy value
                 
             except Exception as e:
-                 print(f"\n\nError during train_step (Epoch {epoch+1}, Step {step}): {e}")
-                 # Decide how to handle: continue, break, etc.
-                 continue # Skip batch
+                print(f"\n\nError during train_step (Epoch {epoch+1}, Step {step}): {e}")
+                # Decide how to handle: continue, break, etc.
+                continue # Skip batch
 
             # Log step-wise loss to TensorBoard
             if summary_writer and global_step_train % 2 == 0: # Log less frequently
                 with summary_writer.as_default(step=global_step_train):
                     tf.summary.scalar('loss/step_train', train_loss.numpy(), description="Training loss per step")
-                # summary_writer.flush()
+                
             
             global_step_train += 1
 
@@ -316,15 +351,15 @@ def contrastive_train(model,
                 # Log step-wise loss to TensorBoard (optional)
                 if summary_writer and global_step_val % 2 == 0:
                     with summary_writer.as_default(step=global_step_val):
-                         tf.summary.scalar('loss/step_val', val_loss.numpy())
-                    # summary_writer.flush()
+                        tf.summary.scalar('loss/step_val', val_loss.numpy())
+                    
                 global_step_val += 1
             
 
             
         
         # End of Epoch
-        # current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
+        #
         # ... (calculate mean_epoch_loss) ...
         mean_epoch_train_loss = np.nanmean(step_wise_train_loss) if step_wise_train_loss else np.inf
         epoch_wise_train_loss.append(mean_epoch_train_loss)
@@ -332,64 +367,89 @@ def contrastive_train(model,
         mean_epoch_val_loss = np.nanmean(step_wise_val_loss) if step_wise_val_loss else np.inf
         epoch_wise_val_loss.append(mean_epoch_val_loss) # Append even if inf/nan for length consistency
         
-        # current_lr = optimizer.lr(optimizer.iterations).numpy() if hasattr(optimizer.lr, '__call__') else optimizer.lr.numpy()
         current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
         
         # Print Epoch Summary
         val_loss_str = f"{mean_epoch_val_loss:.5f}" if valid_loader else "N/A"
         print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss:.5f} | Val Loss: {val_loss_str} | LR: {current_lr:.4E}")
+        #
+        # Remove MLflow logging before packaging
+        #
+        # === MLFLOW METRIC LOGGING ===
+        #
+        #
+        # 
+        mlflow.log_metric("loss/epoch_train", mean_epoch_train_loss, step=epoch)
+        mlflow.log_metric("loss/epoch_val", mean_epoch_val_loss, step=epoch)
+        mlflow.log_metric("learning_rate", current_lr, step=epoch)
+        # =============================
         # Log epoch metrics to TensorBoard
         # Log epoch metrics to TensorBoard
         if summary_writer:
             with summary_writer.as_default(step=epoch):
                 tf.summary.scalar('loss/epoch_train', mean_epoch_train_loss)
                 if valid_loader:
-                     tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
+                    tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
-        
-       
-
-        
+        #
         # --- Checkpointing and Early Stopping based on Validation Loss ---
+        #
         current_best_metric = mean_epoch_val_loss if valid_loader else mean_epoch_train_loss # Use train loss if no validation
+        #
         # Early Stopping Check
+        #
         if current_best_metric < best_val_loss: # Compare with best_val_loss tracker
             status_prefix = f"Val loss" if valid_loader else f"Train loss"
-            print(f"  {status_prefix} improved from {best_val_loss:.5f} to {current_best_metric:.5f}.")
+            print(f"\n  --{status_prefix} improved from {best_val_loss:.5f} to {current_best_metric:.5f}.")
             best_val_loss = current_best_metric # Update best loss tracker
             es_count = 0
-            # Optional: Save model weights
-            # model.save_weights('best_contrastive_model.weights.h5')
-            # model.save_weights(os.path.join(path_to_save, 'weights.h5'))
-            # Save the weights *only if improvement* occurs TO THE UNIQUE FILENAME
+            # 
+            # Save best weights
+            #
             if best_weights_path:
-                print(f"  Saving best weights for this run to {best_weights_path}...")
+                print(f"\n\nSaving best weights for this run to {best_weights_path}...")
                 try:
                     model.save_weights(best_weights_path) # Overwrites previous best FOR THIS RUN
-                    print("  Weights saved successfully.")
+                    print("\n\nWeights saved successfully.\n")
                 except Exception as e:
-                    print(f"  Error saving weights: {e}")
+                    print(f"\n\nError saving weights: {e}\n")
         else:
             # Stop early stopping if validation isn't available or loss is inf/nan
             if valid_loader and np.isfinite(mean_epoch_val_loss):
                 es_count += 1
-                print(f"  Val loss did not improve. Early stopping count: {es_count}/{patience}")
+                print(f"\n --Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
             elif not valid_loader and np.isfinite(mean_epoch_train_loss):
                 es_count += 1 # Can still early stop on train loss if no validation
-                print(f"  Train loss did not improve. Early stopping count: {es_count}/{patience}")
+                print(f"\n --Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
             else:
-                print("  Loss is inf/nan or validation unavailable, skipping early stopping count.")
+                print("\n --Loss is inf/nan or validation unavailable, skipping early stopping count.\n")
 
         if es_count >= patience:
-            print(f'\n\n[INFO] Early Stopping Triggered after {epoch + 1} epochs.')
+            print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
             break
     
+    # --- End of Training Loop ---    
     if summary_writer:
         summary_writer.close()
     
-    print("Training finished.")
-
+    print("\n\nTraining finished.")
+    #
+    # Remove MLflow logging before packaging
+    #    # === MLFLOW MODEL LOGGING ===
+    #
+    #
+    if best_weights_path:
+        print(f"\n\nLogging the complete model to MLflow...\n\n")
+        mlflow.tensorflow.log_model(
+            model=model,
+            name="AstraNet(pre-trained)",
+            registered_model_name="AstraNet(pre-trained)" 
+        )
+        print("\n\nComplete model logged.")
+    # =============================
+    # Save the weights to the local directory
+    #
     if best_weights_path and os.path.exists(best_weights_path):
          print(f"\n\nBest weights saved at: {best_weights_path} (Best Val Loss: {best_val_loss:.5f})")
     elif path_to_save:

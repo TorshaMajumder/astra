@@ -452,8 +452,9 @@ def contrastive_data_loader(source,
          raise ValueError(f"\n\nLength of all augmentation parameter lists/tuples must match n_views {n_views}.")
 
     # --- File Discovery using Glob Pattern ---
+    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
     glob_pattern = os.path.join(source, '*', 'chunk_*.record')
-    print(f"\n\nSearching for TFRecord files using pattern: {glob_pattern}")
+    print(f"Searching for TFRecord files using pattern: {glob_pattern}")
     # Keep shuffle=False here; we'll shuffle the dataset elements later
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
     # --- Check if files were found ---
@@ -469,8 +470,8 @@ def contrastive_data_loader(source,
         print(f"\n\nFound {num_files_found} TFRecord files.")
         # Optional: Print a few example filenames for verification
         print("\n\nExample filenames:\n\n")
-        for f in filenames.take(2):
-            print(f"- {f.numpy().decode()}")
+        for f in filenames.take(1):
+            print(f"- {f.numpy().decode()}\n\n")
     # --- End File Discovery and Check ---
 
     # Use interleave for better performance with multiple files
@@ -501,7 +502,7 @@ def contrastive_data_loader(source,
     # across files earlier. Let's keep shuffle before mapping for now.
     # If shuffling after:
     shuffle_buffer_size = max(buffer_size // batch_size, 2)
-    print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})\n\n")
+    print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})")
     zipped_dataset = zipped_dataset.shuffle(buffer_size=shuffle_buffer_size, seed=seed, reshuffle_each_iteration=True)
     
     # The current `get_window` already does this. So, `batch` should be sufficient.

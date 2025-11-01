@@ -1,8 +1,7 @@
-
-
 import os
 import json
 import yaml
+import mlflow
 import pprint
 import logging
 import datetime 
@@ -39,8 +38,17 @@ def clustered_training():
     pass
 
 def contrastive_training(args):
-    
-    # 2. Load the YAML configuration file
+    #
+    # Remove MLflow logging before packaging
+    #
+    # Initialize MLflow Tracking
+    # Set an URI and Experiment name for MLflow
+    #
+    mlflow.set_tracking_uri("http://localhost:5000")
+    mlflow.set_experiment("Pre-training_Experiments_AstraNet")
+    # ===============================================
+    # Load the YAML configuration file
+    #
     try:
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
@@ -51,30 +59,37 @@ def contrastive_training(args):
         print(f"Error loading YAML file: {e}")
         return
 
-    # 3. Override config with command-line arguments if they were provided
+    # Override config with command-line arguments if they were provided
     # This loop checks if any command-line argument was given a value (is not None)
     # and updates the config dictionary with it.
+    # ==============================================
     for key, value in vars(args).items():
         if value is not None and key != 'config':
             config[key] = value
-
+    # ================ SKIP ==============================
     # --- You now have your final configuration in the `config` dictionary ---
     # print("--- Final Configuration ---")
     # pprint.pprint(config)
     # print("-------------------------")
-
-
+    # ===============================================
+    #
+    #
     # --- Setup Paths and TensorBoard Writer ---
+    #
+    #
     run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_log_dir = None
     if config['path_to_save']:
+        #
         # Create a subdirectory for this specific run to hold weights AND TensorBoard logs
+        #
         run_log_dir = os.path.join(config['path_to_save'], f"run_{run_timestamp}")
         os.makedirs(run_log_dir, exist_ok=True)
         summary_writer = tf.summary.create_file_writer(run_log_dir)
         print(f"\n\nSaved all the parameters in: {run_log_dir}")
-
-    # --- 1. Collect and Log Hyperparameters ---
+    # ===============================================
+    # ---  Collect and Log Hyperparameters ---
+    #
     hparams = {
             "run_timestamp": run_timestamp,
             "model_params": {
@@ -100,7 +115,10 @@ def contrastive_training(args):
                 "path_to_save": run_log_dir
             }
         }
-    
+    # ===============================================
+    #
+    # Log hyperparameters to TensorBoard
+    #
     if summary_writer: # Log hparams if writer exists
         # Convert the dictionary to a nicely formatted string
         hparams_string = f"<pre>{json.dumps(hparams, indent=1)}</pre>"
@@ -109,61 +127,85 @@ def contrastive_training(args):
             tf.summary.text("hyperparameters", hparams_string, description="Hyperparameters for this run")
         summary_writer.flush() # Write immediately
         summary_writer.close() # Close the writer to free resources
+    # ===============================================
+    # Remove MLflow logging before packaging
+    # Change the "run_name" to the format - {run_timestamp}_server_name"
+    # --- Start MLflow Run ---
+    #
+    with mlflow.start_run(run_name=f"{run_timestamp}_COIN") as run:
+        #
+        # Add a tag for easier filtering (optional but good practice)
+        mlflow.set_tag("model_type", "AstraNet")
+        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
+        # ===============================================
+        # Instantiate Model
+        model = AstraNet(
+            num_layers=hparams["model_params"]["num_layers"],
+            d_model=hparams["model_params"]["d_model"],
+            base=hparams["model_params"]["base"],
+            num_heads=hparams["model_params"]["num_heads"],
+            dff=hparams["model_params"]["dff"],
+            rate=hparams["model_params"]["rate"],
+            mjd=hparams["model_params"]["mjd"],
+            use_drop=hparams["model_params"]["use_drop"],
+            use_band_info=hparams["model_params"]["use_band_info"],
+            projection_dim=hparams["model_params"]["projection_dim"] # Pass projection dim
+        )
+        #
+        # Dummy call to build the model (optional but good practice)
+        # Need example input shapes - derive from maxlens
+        # --- Build the model with a dummy call (still recommended) ---
+        print("\n\nBuilding model with dummy input...\n\n")
+        # Use the sum of the maxlens as the sequence length for the dummy input
+        build_seq_len = sum(config['maxlens'][0].values()) 
+        dummy_input = {
+            'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
+        }
+        # Perform the dummy call
+        _ = model(dummy_input,  training=False)
+        # Print the model summary
+        model.summary()
+        # ===============================================
+        #
+        #
+        # Start Training
+        #
+        # --- Contrastive Training ---
+        train_loss_history,  val_loss_history = contrastive_train(
+                                                        model,
+                                                        path_to_read=hparams["data_params"]["path_to_read"],
+                                                        path_to_val=hparams["data_params"]["path_to_val"],
+                                                        path_to_save=hparams["data_params"]["path_to_save"],
+                                                        n_views=hparams["model_params"]["n_views"],
+                                                        batch_size=hparams["training_params"]["batch_size"],
+                                                        temperature=hparams["training_params"]["temperature"],
+                                                        patience=hparams["training_params"]["patience"],
+                                                        epochs=hparams["training_params"]["epochs"],
+                                                        # initial_lr=lr, # Only if use_custom_schedule=False
+                                                        use_custom_schedule=hparams["training_params"]["use_custom_schedule"], # Use AdamW with schedule
+                                                        warmup_steps=hparams["training_params"]["warmup_steps"], # Standard warmup
+                                                        apply_white_noise=hparams["data_params"]["apply_white_noise"],
+                                                        noise_levels=hparams["data_params"]["noise_levels"],
+                                                        apply_binning=hparams["data_params"]["apply_binning"],
+                                                        apply_outlier=hparams["data_params"]["apply_outlier"],
+                                                        maxlens=hparams["data_params"]["maxlens"],
+                                                        bin_widths=hparams["data_params"]["bin_widths"],
+                                                        drop_rates=hparams["data_params"]["drop_rates"],
+                                                        buffer_size=hparams["data_params"]["buffer_size"],
+                                                    )
 
-
-    # Instantiate Model
-    model = AstraNet(
-        num_layers=hparams["model_params"]["num_layers"],
-        d_model=hparams["model_params"]["d_model"],
-        base=hparams["model_params"]["base"],
-        num_heads=hparams["model_params"]["num_heads"],
-        dff=hparams["model_params"]["dff"],
-        rate=hparams["model_params"]["rate"],
-        mjd=hparams["model_params"]["mjd"],
-        use_drop=hparams["model_params"]["use_drop"],
-        use_band_info=hparams["model_params"]["use_band_info"],
-        projection_dim=hparams["model_params"]["projection_dim"] # Pass projection dim
-    )
-
-    # Dummy call to build the model (optional but good practice)
-    # Need example input shapes - derive from maxlens
-    # --- Build the model with a dummy call (still recommended) ---
-    print("\n\nBuilding model with dummy input...")
-    # Use the expected sequence length AFTER sliding_window for the anchor view
-    build_seq_len = sum(config['maxlens'][0].values()) # e.g., 12 or 200 depending on strategy
-    dummy_input = {
-        'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-        'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-        'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-        'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
-    }
-
-    _ = model(dummy_input,  training=False)
-    model.summary()
-
-    # Start Training
-    train_loss_history,  val_loss_history = contrastive_train(
-                                                    model,
-                                                    path_to_read=hparams["data_params"]["path_to_read"],
-                                                    path_to_val=hparams["data_params"]["path_to_val"],
-                                                    path_to_save=hparams["data_params"]["path_to_save"],
-                                                    n_views=hparams["model_params"]["n_views"],
-                                                    batch_size=hparams["training_params"]["batch_size"],
-                                                    temperature=hparams["training_params"]["temperature"],
-                                                    patience=hparams["training_params"]["patience"],
-                                                    epochs=hparams["training_params"]["epochs"],
-                                                    # initial_lr=lr, # Only if use_custom_schedule=False
-                                                    use_custom_schedule=hparams["training_params"]["use_custom_schedule"], # Use AdamW with schedule
-                                                    warmup_steps=hparams["training_params"]["warmup_steps"], # Standard warmup
-                                                    apply_white_noise=hparams["data_params"]["apply_white_noise"],
-                                                    noise_levels=hparams["data_params"]["noise_levels"],
-                                                    apply_binning=hparams["data_params"]["apply_binning"],
-                                                    apply_outlier=hparams["data_params"]["apply_outlier"],
-                                                    maxlens=hparams["data_params"]["maxlens"],
-                                                    bin_widths=hparams["data_params"]["bin_widths"],
-                                                    drop_rates=hparams["data_params"]["drop_rates"],
-                                                    buffer_size=hparams["data_params"]["buffer_size"],
-                                                )
+    
+        # ----- Log all parameters from the dictionary ---
+        # This will log everything from your YAML file
+        mlflow.log_params(hparams)
+        # ===============================================
+        print("\n\nRun logged to MLflow.")
+        #
+        #
+        # ================ END ==========================
 
 
 

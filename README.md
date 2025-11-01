@@ -11,6 +11,9 @@
 >> pip install -e .  
 ## For GPU users
 >> pip install -e .[gpu]   
+## For MLflow logging install/re-install the two packages (Remove them before packaging from README)
+>> pip install mlflow
+>> pip install pyarrow==22.0.0
 
 ```
 ## Creating Tensor Records
