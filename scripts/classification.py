@@ -152,7 +152,8 @@ run_linear_probe_with_split(
     path_to_save = path_to_save,
     embeddings=pt_test_embeddings,
     labels=final_mapped_labels,
-    model_name="Pre-trained"
+    model_name="Pre-trained",
+    classifier_type='rf'
 )
 
 # Run for the Fine-tuned model
@@ -160,5 +161,6 @@ run_linear_probe_with_split(
     path_to_save = path_to_save,
     embeddings=ft_test_embeddings,
     labels=final_mapped_labels, # Use the same labels
-    model_name="Fine-tuned"
+    model_name="Fine-tuned",
+    classifier_type='rf'
 )
