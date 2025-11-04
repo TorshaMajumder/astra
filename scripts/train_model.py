@@ -136,6 +136,9 @@ def contrastive_training(args):
         #
         # Add a tag for easier filtering (optional but good practice)
         mlflow.set_tag("model_type", "AstraNet")
+        # ===============================================
+        # Change the "run_name" to the format - {run_timestamp}_server_name"
+        #
         print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
         # ===============================================
         # Instantiate Model

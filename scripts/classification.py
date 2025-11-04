@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -47,9 +48,17 @@ def run_linear_probe_with_split(path_to_save, embeddings, labels, model_name, te
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
-    # --- Train Logistic Regression Classifier ---
-    print("Training Logistic Regression classifier...")
-    classifier = LogisticRegression(random_state=42, C=0.1, max_iter=1000)
+    # --- Train the Selected Classifier ---
+    if classifier_type.lower() == 'rf':
+        print("Training Random Forest classifier...")
+        # n_estimators=100 is a good default. n_jobs=-1 uses all available CPU cores.
+        classifier = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    elif classifier_type.lower() == 'lr':
+        print("Training Logistic Regression classifier...")
+        classifier = LogisticRegression(random_state=42, C=0.1, max_iter=1000)
+    else:
+        raise ValueError("classifier_type must be 'rf' or 'lr'")
+
     classifier.fit(X_train_scaled, y_train)
     
     # --- Evaluate on the Test Split ---
