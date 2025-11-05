@@ -181,7 +181,7 @@ class EncoderLayer(layers.Layer):
 
     def call(self, x, mask, training=True):
 
-        attn_output, _ = self.mha(x, mask)
+        attn_output, attention_weights = self.mha(x, mask)
 
         attn_output = self.dropout1(attn_output, training=training)
 
@@ -200,7 +200,7 @@ class EncoderLayer(layers.Layer):
         # else:
         #     out2 = self.layernorm2(ffn_output)
 
-        return out2
+        return out2, attention_weights
 
 
 class Encoder(layers.Layer):
@@ -219,11 +219,12 @@ class Encoder(layers.Layer):
     def call(self, x, mask, training=True):
 
 
-        # x = self.embedding(x)
-
-        # x = self.dropout(x, training=training)
+        # Create a dictionary to store attention weights from each layer
+        attention_weights = {}
 
         for i in range(self.num_layers):
-            x = self.enc_layers[i](x, mask, training=training)
+            x, block_attention_weights = self.enc_layers[i](x, mask, training=training)
+            # Store the attention weights for the current layer
+            attention_weights[f'encoder_layer_{i+1}_attention'] = block_attention_weights
 
-        return x
+        return x, attention_weights

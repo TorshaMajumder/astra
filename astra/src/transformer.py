@@ -94,7 +94,7 @@ class AstraNet(tf.keras.Model):
 
         # 2. Apply Encoder (takes embeddings and mask)
         # Pass training flag for dropout/LN in encoder
-        enc_output = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
+        enc_output, all_attention_weights = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
 
         # 3. Apply Pooling
         # Invert mask for pooling (True where elements should be KEPT)
@@ -168,7 +168,7 @@ def contrastive_train_step(model, *views_batch, temperature, optimizer):
     # Calculate and apply gradients
     grads = tape.gradient(loss, model.trainable_variables)
     # Optional: Gradient Clipping
-    # grads, _ = tf.clip_by_global_norm(grads, 1.0)
+    grads, _ = tf.clip_by_global_norm(grads, 1.0)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
     return loss

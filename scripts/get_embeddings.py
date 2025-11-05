@@ -103,10 +103,10 @@ embeddings = model.embedding_layer(input_layer)
 mask_input = input_layer['mask']
 
 
-encoder_output = model.encoder(embeddings, mask=mask_input)
+encoder_output, all_attention_weights = model.encoder(embeddings, mask=mask_input)
 pool_mask = tf.keras.layers.Lambda(
-    lambda m: tf.logical_not(tf.cast(m, tf.bool))
-)(mask_input)
+            lambda m: tf.logical_not(tf.cast(m, tf.bool))
+            )(mask_input)
 pooled_output = model.pooling(encoder_output, mask=pool_mask)
 
 
@@ -125,7 +125,7 @@ pooled_output = model.pooling(encoder_output, mask=pool_mask)
 # --- Create the final model ---
 # The inputs are the original dictionary of Input layers.
 # The output is the final pooled_output tensor we just defined.
-encoder_model = tf.keras.Model(inputs=input_layer, outputs=pooled_output, name="ASTRA_Encoder")
+encoder_model = tf.keras.Model(inputs=input_layer, outputs=[pooled_output, all_attention_weights], name="ASTRA_Encoder")
 encoder_model.trainable = False # Set to inference mode
 
 print("   Encoder model created successfully.")
@@ -167,7 +167,7 @@ for batch_data in tqdm(inference_loader, desc="Generating Embeddings"):
         'band_info': batch_data['band_info'],
         'mask': batch_data['mask']
     }
-    batch_embeddings = encoder_model(model_inputs, training=False)
+    batch_embeddings, batch_attention_weights = encoder_model(model_inputs, training=False)
 
     # Collect the results
     all_embeddings.append(batch_embeddings.numpy())

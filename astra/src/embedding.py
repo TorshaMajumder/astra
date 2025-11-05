@@ -39,7 +39,14 @@ class AstraEmbedding(layers.Layer):
     
     self.seq_embedding = layers.Dense(d_model, name="sequence_embedding") # Embed magnitude feature
     if self.use_band_info:
-      self.seg_embedding = layers.Dense(d_model, name="segment_embedding")
+      # In your model's __init__
+      self.seg_embedding = tf.keras.Sequential([
+            # Input shape is 1 for the single log(wavelength) value
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(d_model) # Project up to the model dimension
+        ], name="segment_embedding")
+
+      # self.seg_embedding = layers.Dense(d_model, name="segment_embedding")
     self.pos_encoding = self.build_positional_encoding() 
     self.dropout = layers.Dropout(rate)
       
