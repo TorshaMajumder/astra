@@ -6,8 +6,7 @@ path_to_val: "../dataset/cepheids/val/"
 path_to_save: "../contrastive_loss_res/"
 
 # --- Architecture ---
-# n_views: 3            # Anchor, Positive, Negative --- Triplet ---
-n_views: 2            # Anchor, Positive --- Siamese ---
+n_views: 2            # Anchor, Hard Positive --- Siamese ---
 
 # --- Training Hyperparameters ---
 temperature: 0.1      # Contrastive loss temperature

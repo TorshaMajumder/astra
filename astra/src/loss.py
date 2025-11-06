@@ -96,9 +96,10 @@ def nt_xent_loss(*views, temperature):
     pair_losses = -(l_pos - log_den_for_pairs)
 
     # Total loss is the average over all positive pairs.
-    total_loss = tf.reduce_mean(pair_losses)
+    # total_loss = tf.reduce_mean(pair_losses)
 
-    return total_loss
+    #return total_loss
+    return pair_losses
 
 
 

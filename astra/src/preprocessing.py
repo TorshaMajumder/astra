@@ -452,8 +452,8 @@ def contrastive_data_loader(source,
          raise ValueError(f"\n\nLength of all augmentation parameter lists/tuples must match n_views {n_views}.")
 
     # --- File Discovery using Glob Pattern ---
-    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    glob_pattern = os.path.join(source, '*', 'chunk_*.record')
+    glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
+    # glob_pattern = os.path.join(source, '*', 'chunk_*.record')
     print(f"Searching for TFRecord files using pattern: {glob_pattern}")
     # Keep shuffle=False here; we'll shuffle the dataset elements later
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)

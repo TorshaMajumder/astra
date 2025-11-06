@@ -1,47 +1,60 @@
 # config.yaml
-
-# --- Data Paths ---
+#
+# --- Data set Paths ---
+#
 path_to_read: "../dataset/cepheids/train/"
 path_to_val: "../dataset/cepheids/val/"
 path_to_save: "../lsdb_issues/"
-
+#
 # --- Architecture ---
-## Provide n_views=3 for Triplet model/Provide n_views=2 for Siamese model
-n_views: 3            # Anchor, Positive, Negative --- Triplet ---
-# n_views: 2            # Anchor, Positive --- Siamese ---
-
+#
+# Provide n_views=3 for Triplet model/Provide n_views=2 for Siamese model
+#
+n_views: 3            # Anchor, Canonical Positive, Hard Positive --- Triplet ---
+#
 # --- Training Hyperparameters ---
+#
+# NOTE: global_batch_size = batch_size * num_gpus
+# So, set the batch_size accordingly.
+# e.g. batch_size = 128, num_gpus = 8, therefore, global_batch_size = 1024
+#
 temperature: 0.1      # Contrastive loss temperature
 patience: 100         # Early stopping patience
-epochs: 100             # Number of training epochs
-batch_size: 400       # Batch size (adjust based on GPU memory)
-
-# --- Augmentation Parameters (Anchor, Positive, Negative) ---
+epochs: 100           # Number of training epochs
+batch_size: 400       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
+num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training.
+#
+# --- Augmentation Parameters (Anchor, Canonical Positive, Hard Positive) ---
+#
 apply_white_noise: [True, False, True]   # Add white noise
 noise_levels : [0.10, 0.0, 0.10]         # Noise level for each view
 apply_binning: [False, False, True]
 apply_outlier: [False, False, True]
-# Sequence lengths for Anchor, Positive, Negative
+#
+# Sequence lengths for Anchor, Canonical Positive, Hard Positive
+#
 maxlens:
   - {'g': 100, 'r': 175, 'i': 25}  # Anchor
   - {'g': 50, 'r': 88, 'i': 13}  # Positive
   - {'g': 100, 'r': 175, 'i': 25}  # Negative
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
-
+#
 # --- Transformer Model Parameters ---
-num_layers: 4
+#
+num_layers: 4       # Number of encoder layers
 mjd: True           # Use MJD for positional encoding
 base: 10000.0
-d_model: 256
-num_heads: 4
+d_model: 256        # Embedding dimension
+num_heads: 4        # Number of attention heads
 dff: 1024           # Feed-forward network dimension
 rate: 0.1           # Dropout rate
-use_band_info: True
-use_drop: True
-projection_dim: 128   # Projection head dimension for SimCLR
-
+use_band_info: True # Use segment embeddings
+use_drop: True      # Use dropout
+projection_dim: 128 # Projection head dimension 
+#
 # --- Optimizer and Scheduler ---
+#
 initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 #lr = 1e-4            # Use initial_lr in train function if not using schedule. 
 use_custom_schedule: True

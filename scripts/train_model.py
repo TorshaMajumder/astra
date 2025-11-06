@@ -8,28 +8,29 @@ import datetime
 import argparse
 import tensorflow as tf
 from astra.src.transformer import AstraNet, contrastive_train
+from astra.src.scheduler import CustomSchedule, warmup_schedule
 
 
-try:
-    import psutil
-    physical_cores = psutil.cpu_count(logical=False)
-    logical_cores = psutil.cpu_count(logical=True)
-    print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
-except ImportError:
-    physical_cores = os.cpu_count() # Fallback, might be logical cores
-    print("Install 'psutil' for accurate core counts.")
-    print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
+# try:
+#     import psutil
+#     physical_cores = psutil.cpu_count(logical=False)
+#     logical_cores = psutil.cpu_count(logical=True)
+#     print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
+# except ImportError:
+#     physical_cores = os.cpu_count() # Fallback, might be logical cores
+#     print("Install 'psutil' for accurate core counts.")
+#     print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
 
-# --- Configuration for CPU Parallelism ---
+# # --- Configuration for CPU Parallelism ---
 
-# Set the number of threads for intra-operation parallelism
-# This controls parallelism within a single op (e.g., matrix multiplication)
-num_intra_threads = 20
-tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
+# # Set the number of threads for intra-operation parallelism
+# # This controls parallelism within a single op (e.g., matrix multiplication)
+# num_intra_threads = 20
+# tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
 
-# Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
-num_inter_threads = 0 # Let TF decide, or try a small number like 2
-tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
+# # Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
+# num_inter_threads = 0 # Let TF decide, or try a small number like 2
+# tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
@@ -38,6 +39,42 @@ def clustered_training():
     pass
 
 def contrastive_training(args):
+    # ===============================================
+    # --- Device Strategy Setup ---
+    #
+    # Detect available GPUs
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    
+    # If user specifies a number of GPUs, select them. Otherwise, use all available.
+    if args.num_gpus is not None and args.num_gpus > 0:
+        if args.num_gpus > len(gpus):
+            print(f"Warning: Requested {args.num_gpus} GPUs, but only {len(gpus)} are available. Using all available.")
+            gpus_to_use = gpus
+        else:
+            gpus_to_use = gpus[:args.num_gpus]
+        
+        # Make only the selected GPUs visible to TensorFlow
+        tf.config.experimental.set_visible_devices(gpus_to_use, 'GPU')
+        print(f"Using {len(gpus_to_use)} specified GPU(s).")
+    
+    # Re-list visible devices after setting them
+    visible_gpus = tf.config.get_visible_devices('GPU')
+    if visible_gpus:
+        # If GPUs are available and visible, use MirroredStrategy for data parallelism.
+        # This will handle distributing data and syncing gradients automatically.
+        strategy = tf.distribute.MirroredStrategy()
+        print(f"Running in GPU mode with MirroredStrategy on {len(visible_gpus)} device(s).")
+    else:
+        # If no GPUs are found, run on CPU.
+        # We get a "default" strategy that does nothing special.
+        strategy = tf.distribute.get_strategy()
+        print("No GPUs found. Running in CPU mode.")
+
+    # Get the global batch size. The strategy will automatically split this
+    # across the available replicas (GPUs).
+    # For example, with 8 GPUs, a global batch size of 1024 means each GPU
+    # gets a per-replica batch of 128.
+    global_batch_size = args.batch_size * strategy.num_replicas_in_sync
     #
     # Remove MLflow logging before packaging
     #
@@ -142,18 +179,33 @@ def contrastive_training(args):
         print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
         # ===============================================
         # Instantiate Model
-        model = AstraNet(
-            num_layers=hparams["model_params"]["num_layers"],
-            d_model=hparams["model_params"]["d_model"],
-            base=hparams["model_params"]["base"],
-            num_heads=hparams["model_params"]["num_heads"],
-            dff=hparams["model_params"]["dff"],
-            rate=hparams["model_params"]["rate"],
-            mjd=hparams["model_params"]["mjd"],
-            use_drop=hparams["model_params"]["use_drop"],
-            use_band_info=hparams["model_params"]["use_band_info"],
-            projection_dim=hparams["model_params"]["projection_dim"] # Pass projection dim
-        )
+        # --- Use the strategy scope to create the model and optimizer ---
+        with strategy.scope():
+            # ===============================================
+            # Instantiate Model (SAME AS BEFORE, just indented)
+            model = AstraNet(
+                num_layers=hparams["model_params"]["num_layers"],
+                d_model=hparams["model_params"]["d_model"],
+                base=hparams["model_params"]["base"],
+                num_heads=hparams["model_params"]["num_heads"],
+                dff=hparams["model_params"]["dff"],
+                rate=hparams["model_params"]["rate"],
+                mjd=hparams["model_params"]["mjd"],
+                use_drop=hparams["model_params"]["use_drop"],
+                use_band_info=hparams["model_params"]["use_band_info"],
+                projection_dim=hparams["model_params"]["projection_dim"] # Pass projection dim
+            )
+
+            # Instantiate Optimizer inside the scope
+            if config['use_custom_schedule']:
+                # Note: You need d_model from hparams here
+                d_model = hparams["model_params"]["d_model"] 
+                warmup_steps = hparams["training_params"]["warmup_steps"]
+                custom_lr = CustomSchedule(d_model, warmup_steps=warmup_steps)
+                optimizer = tf.keras.optimizers.Adam(learning_rate=custom_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+            else:
+                optimizer = tf.keras.optimizers.Adam(learning_rate=config['initial_lr'])
+            # --- END OF CHANGE ---
         #
         # Dummy call to build the model (optional but good practice)
         # Need example input shapes - derive from maxlens
@@ -178,12 +230,14 @@ def contrastive_training(args):
         #
         # --- Contrastive Training ---
         train_loss_history,  val_loss_history = contrastive_train(
-                                                        model,
+                                                        model=model,
+                                                        strategy=strategy,
+                                                        optimizer=optimizer,
                                                         path_to_read=hparams["data_params"]["path_to_read"],
                                                         path_to_val=hparams["data_params"]["path_to_val"],
                                                         path_to_save=hparams["data_params"]["path_to_save"],
                                                         n_views=hparams["model_params"]["n_views"],
-                                                        batch_size=hparams["training_params"]["batch_size"],
+                                                        batch_size=global_batch_size,
                                                         temperature=hparams["training_params"]["temperature"],
                                                         patience=hparams["training_params"]["patience"],
                                                         epochs=hparams["training_params"]["epochs"],
@@ -197,7 +251,7 @@ def contrastive_training(args):
                                                         maxlens=hparams["data_params"]["maxlens"],
                                                         bin_widths=hparams["data_params"]["bin_widths"],
                                                         drop_rates=hparams["data_params"]["drop_rates"],
-                                                        buffer_size=hparams["data_params"]["buffer_size"],
+                                                        buffer_size=hparams["data_params"]["buffer_size"]
                                                     )
 
     
@@ -218,7 +272,7 @@ def main():
     parser = argparse.ArgumentParser(prog='astra-net',
                                     description="Train AstraNet model")
     
-    # The config file argument is required.
+    # The loss argument is required.
     parser.add_argument('--loss', type=str, required=True, help='Provide the loss function as contrastive or clustering.')
     # The config file argument is required.
     parser.add_argument('--config', type=str, required=True, help='Path to the YAML configuration file.')
@@ -226,7 +280,8 @@ def main():
     # We can also add arguments here that we might want to override frequently.
     # For example, to quickly run a test for fewer epochs.
     parser.add_argument('--epochs', type=int, help='Override the number of epochs from the config file.')
-    parser.add_argument('--batch_size', type=int, help='Override the batch size from the config file.')
+    parser.add_argument('--batch_size', type=int, help='Provide per-GPU batch_size or batch_size for CPU. Overrides the batch size from the config file.')
+    parser.add_argument('--num_gpus', type=int, default=0, help='Number of GPUs to use for training. Default set to 0 for CPU mode.')
 
     args = parser.parse_args()
 
@@ -237,7 +292,7 @@ def main():
         clustered_training(args)
     
     else:
-        pass
+        pass 
 
     
 
