@@ -35,7 +35,7 @@ astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/z
 ```
 ## Training ASTRA framework with "Contrastive loss"
 ```
-astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --epoch 100 --batch_size 300
+astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --num_gpus 0 --epoch 100 --batch_size 300
 ```
 ## For more help!
 ```
