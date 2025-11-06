@@ -1,6 +1,7 @@
 import os
 import json
 import yaml
+import psutil
 import mlflow
 import pprint
 import logging
@@ -11,26 +12,22 @@ from astra.src.transformer import AstraNet, contrastive_train
 from astra.src.scheduler import CustomSchedule, warmup_schedule
 
 
-# try:
-#     import psutil
-#     physical_cores = psutil.cpu_count(logical=False)
-#     logical_cores = psutil.cpu_count(logical=True)
-#     print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
-# except ImportError:
-#     physical_cores = os.cpu_count() # Fallback, might be logical cores
-#     print("Install 'psutil' for accurate core counts.")
-#     print(f"Available CPU logical cores (estimated by os.cpu_count): {physical_cores}")
-
-# # --- Configuration for CPU Parallelism ---
-
-# # Set the number of threads for intra-operation parallelism
-# # This controls parallelism within a single op (e.g., matrix multiplication)
-# num_intra_threads = 20
-# tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
-
-# # Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
-# num_inter_threads = 0 # Let TF decide, or try a small number like 2
-# tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
+# ==========================================================
+# CONFIGURE GPU MEMORY ALLOCATION
+# MUST be done at the start of the program!
+# ==========================================================
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        print("GPUs are available. Setting memory growth to True.")
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        # This will happen if GPUs are already initialized.
+        # It's okay if this happens in an interactive session
+        # after TF has already been used.
+        print(f"RuntimeError setting memory growth: {e}")
+# ==========================================================
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
@@ -69,12 +66,25 @@ def contrastive_training(args):
         # We get a "default" strategy that does nothing special.
         strategy = tf.distribute.get_strategy()
         print("No GPUs found. Running in CPU mode.")
+        physical_cores = psutil.cpu_count(logical=False)
+        logical_cores = psutil.cpu_count(logical=True)
+        print(f"Available CPU cores: Physical={physical_cores}, Logical={logical_cores}")
+        # # Set the number of threads for intra-operation parallelism
+        # This controls parallelism within a single op (e.g., matrix multiplication)
+        num_intra_threads = 10
+        tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
+
+        # Start with 0 or a small number like 2. Setting both high can sometimes cause contention.
+        num_inter_threads = 0 # Let TF decide, or try a small number like 2
+        tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
+
 
     # Get the global batch size. The strategy will automatically split this
     # across the available replicas (GPUs).
     # For example, with 8 GPUs, a global batch size of 1024 means each GPU
     # gets a per-replica batch of 128.
     global_batch_size = args.batch_size * strategy.num_replicas_in_sync
+    print(f"Global batch size: {global_batch_size} (Per-replica: {args.batch_size} x {strategy.num_replicas_in_sync} replicas)")
     #
     # Remove MLflow logging before packaging
     #
@@ -82,7 +92,7 @@ def contrastive_training(args):
     # Set an URI and Experiment name for MLflow
     #
     mlflow.set_tracking_uri("http://localhost:5000")
-    mlflow.set_experiment("Pre-training_Experiments_AstraNet")
+    mlflow.set_experiment("Pre-training-AstraNet-Experiments")
     # ===============================================
     # Load the YAML configuration file
     #
