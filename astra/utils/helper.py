@@ -2,11 +2,15 @@
 # Import all dependencies
 #
 import os
+import glob
 import json
+import mlflow
+import traceback
 import numpy as np
+import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
-from astra.bands.bands import ztf_band
 
 
 @tf.function
@@ -236,5 +240,224 @@ def filter_by_class(source, target_counts, shuffle=True, seed=42):
     return final_dataset.prefetch(AUTO)
 
     
+def process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, learning_rate_tag, use_mlflow=False):
+    #
+    # --- Load Data using EventAccumulator ---
+    #
+    run_directory = os.path.dirname(run_log_dir)
+    print(f"Loading events from: {run_log_dir}")
+
+    try:
+        model_params, training_params, data_params = load_hparams_from_event_file(run_log_dir)
+        # Initialize EventAccumulator
+        ea = event_accumulator.EventAccumulator(
+                                                run_log_dir,
+                                                size_guidance={
+                                                event_accumulator.SCALARS: 0, # Load all scalars
+                                                event_accumulator.TENSORS: 10  # Load all tensors
+                                            }
+                                        )
+
+        # Load the events
+        ea.Reload()
+        
+        #
+        # --- Get TENSOR Tag ---
+        #
+        available_tags = ea.Tags()
+        #
+        # ----------- OPTIONAL: Print available tags ----------------------------------------
+        #
+        # print("Available tag categories:", list(available_tags.keys()))
+        if event_accumulator.TENSORS in available_tags:
+            print("Available tensor tags:", available_tags[event_accumulator.TENSORS])
+        else:
+            print("No 'tensors' data found in event file.")
+            # If scalar tag is present, print that too:
+            if event_accumulator.SCALARS in available_tags:
+                print("Available scalar tags:", available_tags[event_accumulator.SCALARS])
+            else:
+                print("No 'scalars' data found either.")
+            exit() # Exit if no tensor data is found 
+        # ------------------------------------------------------------------------------------
+        # --- Function to extract data from Tensor events ---
+        # ------------------------------------------------------------------------------------
+        def extract_tensor_data(event_acc, tag_name):
+            data = []
+            try:
+                events = event_acc.Tensors(tag_name)
+                for event in events:
+                    # Convert the tensor proto to a numpy array
+                    value_array = tf.make_ndarray(event.tensor_proto)
+                    # Assuming it was logged as a scalar, it should be a 0-D array
+                    # Extract the scalar value using .item()
+                    scalar_value = value_array.item()
+                    data.append((event.step, scalar_value))
+            except KeyError:
+                print(f"\n\nWarning: Tag '{tag_name}' not found in tensors.")
+            except Exception as e:
+                print(f"\n\nError processing tag '{tag_name}': {e}")
+            return data
+        # ------------------------------------------------------------------------------------
+        #
+        # --- Extract Data using the function ---
+        #
+        print(f"\nAttempting to read tags from 'tensors' category...")
+        train_loss_data = extract_tensor_data(ea, train_loss_tag)
+        if train_loss_data:
+            print(f"\nFound {len(train_loss_data)} training loss points (tag: {train_loss_tag}) from tensors.")
+        # ------------------------------------
+        val_loss_data = extract_tensor_data(ea, val_loss_tag)
+        if val_loss_data:
+            print(f"\n\nFound {len(val_loss_data)} validation loss points (tag: {val_loss_tag}) from tensors.")
+        # Check if the tag exists in the 'tensors' category, as text is stored there
+        # ------------------------------------
+        if hparam_tag not in ea.Tags()['tensors'] and model_params is None:
+            print(f"ERROR: Hyperparameter tag '{hparam_tag}' not found in the 'tensors' category of the event file.")
+            print("Available tensor tags:", ea.Tags()['tensors'])
+            return 
+        # ------------------------------------
+        learning_rate = extract_tensor_data(ea, learning_rate_tag)
+        if learning_rate:
+            print(f"\n\nFound {len(learning_rate)} LR points (tag: {val_loss_tag}) from tensors.")
+        
+        # ------------------------------------
+        # --- Store Loss Data ---
+        # ------------------------------------
+        # Create a Pandas DataFrame inside "run_log_dir" to store the loss data
+        #
+        if not train_loss_data and not val_loss_data and not learning_rate:
+            print("\n\nNo loss and LR data found. Skipping this run.")
+            return
+        #
+        # Get total epochs from both lists
+        #
+        all_steps = sorted(list(set([e[0] for e in train_loss_data] + [e[0] for e in val_loss_data])))
+
+        train_losses_dict = {e[0]: e[1] for e in train_loss_data}
+        val_losses_dict = {e[0]: e[1] for e in val_loss_data}
+        LR_dict = {e[0]: e[1] for e in learning_rate}
+
+        df_data = {
+            'epoch': [s + 1 for s in all_steps], # Convert step (0-based) to epoch number (1-based)
+            'train_loss': [train_losses_dict.get(s, None) for s in all_steps],
+            'val_loss': [val_losses_dict.get(s, None) for s in all_steps],
+            'LR': [LR_dict.get(s, None) for s in all_steps] if learning_rate else None
+        }
+        loss_df = pd.DataFrame(df_data)
+        # ===============================================
+        # Remove MLflow logging before packaging
+        # Change the "run_name" to the format - {run_timestamp}_server_name"
+        # --- Start MLflow Run ---
+        #
+        if use_mlflow:
+            # --- MLFLOW MODE ---
+            run_timestamp = os.path.basename(run_directory)
+            with mlflow.start_run(run_name=f"{run_timestamp}_COIN") as run:
+                #
+                # Add a tag for easier filtering (optional but good practice)
+                mlflow.set_tag("model_type", "AstraNet")
+                # ===============================================
+                # Change the "run_name" to the format - {run_timestamp}_server_name"
+                #
+                print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
+                # Log Hyperparameters
+                mlflow.log_params({"run_timestamp":run_timestamp,
+                                   "model_params":model_params, 
+                                   "training_params":training_params, 
+                                   "data_params":data_params})
+                # Log Metrics
+                for step, value in train_loss_data:
+                    mlflow.log_metric("loss/epoch_train", value, step=step)
+                for step, value in val_loss_data:
+                    mlflow.log_metric("loss/epoch_val", value, step=step)
+                for step, value in learning_rate:
+                    mlflow.log_metric("learning_rate", value, step=step)
+                
+                print("Successfully logged params and metrics to MLflow.")
+
+        else:
+            # --- LOCAL MODE ---
+            loss_df.to_csv(os.path.join(os.path.dirname(run_log_dir), 'loss_summary.csv'))
+            fig = loss_df.plot(x='epoch', y=['train_loss', 'val_loss'], kind='line', marker='o', title='Training and Validation Loss over Epochs', ylabel='Loss', xlabel='Epoch').get_figure()
+            fig.savefig(os.path.join(os.path.dirname(run_log_dir), 'loss_plot.png'))
+            print(f"\n\n--- DataFrame Summary --- stored in: {os.path.dirname(run_log_dir)} ---")
+
+    except Exception as e:
+        print(f"\n\nAn unexpected error occurred: {e}")
+        traceback.print_exc()
 
 
+def backfill_mlflow_and_plot_loss(run_log_dir=None, train_loss_tag=None, val_loss_tag=None, hparam_tag=None, learning_rate_tag=None, use_mlflow=False):
+
+    try:
+        if run_log_dir is None:
+            raise FileNotFoundError(f"\nError: Log directory not found: {run_log_dir}")
+        
+        elif train_loss_tag is None or val_loss_tag is None:
+            raise ValueError("\n\nPlease provide 'train_loss_tag', and 'val_loss_tag' parameters.")
+    
+        if use_mlflow:
+            #
+            # Remove MLflow logging before packaging
+            #
+            # Initialize MLflow Tracking
+            # Set an URI and Experiment name for MLflow
+            #
+            mlflow.set_tracking_uri("http://localhost:5000")
+            mlflow.set_experiment("Test_Experiments")
+            print("MLflow mode is ON. Will log to the configured server.")
+        else:
+            print("MLflow mode is OFF. Will save CSV and plots to local run directories.")
+
+        #
+        # The user-defined path is a directory
+        #
+        if os.path.isdir(run_log_dir):
+            print(f"Path '{run_log_dir}' is a directory. Searching for event files recursively...")
+            process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, learning_rate_tag, use_mlflow)
+        #       
+        # For user-defined path is a file
+        #
+        elif os.path.isfile(run_log_dir):
+            print(f"Path '{run_log_dir}' is a file. Attempting to load directly...")
+            process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, learning_rate_tag, use_mlflow)
+        #  
+        # The path doesn't exist
+        #
+        else:
+            print(f"Error: The specified path '{run_log_dir}' does not exist or is not a valid file/directory.")
+            return
+        # --- End of plot_loss function ---
+    
+    except Exception as e:
+        print(f"\n\n{e}")
+        return
+    
+    
+
+    
+
+
+
+
+if __name__ == "__main__":
+    #
+    # Example usage of plot_loss function
+    #
+    # run_log_dir = "/media3/majumder/contrastive_loss_res/"
+    run_log_dir = "/media3/majumder/contrastive_loss_res/run_20250825_214016/"
+    # run_log_dir = "media3/majumder/contrastive_loss_res/run_20250822_215059/events.out.tfevents.1755892260.clrlsstsrv02.in2p3.fr.2826236.0.v2"
+
+    backfill_mlflow_and_plot_loss(
+        run_log_dir=run_log_dir,
+        train_loss_tag='loss/epoch_train',
+        val_loss_tag='loss/epoch_val',
+        hparam_tag = 'hyperparameters',
+        learning_rate_tag='learning_rate',
+        use_mlflow=True
+    )
+
+    # model_params, training_params, data_params = load_hparams_from_event_file(run_log_dir)
+    # print(model_params, training_params, data_params)
+    
