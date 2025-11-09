@@ -254,7 +254,7 @@ def process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, le
                                                 run_log_dir,
                                                 size_guidance={
                                                 event_accumulator.SCALARS: 0, # Load all scalars
-                                                event_accumulator.TENSORS: 10  # Load all tensors
+                                                event_accumulator.TENSORS: 0  # Load all tensors
                                             }
                                         )
 
@@ -379,7 +379,7 @@ def process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, le
         else:
             # --- LOCAL MODE ---
             loss_df.to_csv(os.path.join(os.path.dirname(run_log_dir), 'loss_summary.csv'))
-            fig = loss_df.plot(x='epoch', y=['train_loss', 'val_loss'], kind='line', marker='o', title='Training and Validation Loss over Epochs', ylabel='Loss', xlabel='Epoch').get_figure()
+            fig = loss_df.plot(x='epoch', y=['train_loss', 'val_loss'], kind='line', marker='o', markersize=3 ,title='Training and Validation Loss over Epochs', ylabel='Loss', xlabel='Epoch').get_figure()
             fig.savefig(os.path.join(os.path.dirname(run_log_dir), 'loss_plot.png'))
             print(f"\n\n--- DataFrame Summary --- stored in: {os.path.dirname(run_log_dir)} ---")
 
