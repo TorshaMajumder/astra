@@ -119,18 +119,20 @@ def sliding_window(sequence, build_seq_len, mask, last_index, bands_tensor, max_
     #
     # Pad the sequence and mask with 0 and 1 respectively to make the final length as "build_seq_len"
     #
-    # 1. First, combine the processed bands from the lists into single tensors.
-    combined_series = tf.concat(series, axis=0)
-    combined_mask = tf.concat(mask_series, axis=0)
-    # 2. Now, use your existing `get_window` function to adjust the *entire combined sequence*
-    #    to the final `build_seq_len`. This handles both padding (if too short) and
-    #    truncating (if too long) in one clean operation.
-    final_series, final_mask = get_window(combined_series, combined_mask, build_seq_len, num_cols)
+    # # 1. First, combine the processed bands from the lists into single tensors.
+    # combined_series = tf.concat(series, axis=0)
+    # combined_mask = tf.concat(mask_series, axis=0)
+    # # 2. Now, use your existing `get_window` function to adjust the *entire combined sequence*
+    # #    to the final `build_seq_len`. This handles both padding (if too short) and
+    # #    truncating (if too long) in one clean operation.
+    # final_series, final_mask = get_window(combined_series, combined_mask, build_seq_len, num_cols)
+    # return final_series, final_mask
+    # # =========================== DUMMY CODE ============================================
     # #
-    # result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
-    # #
-    # return result_series, result_mask
-    return final_series, final_mask
+    result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
+    #
+    return result_series, result_mask
+    
 
 
 
@@ -516,21 +518,60 @@ def contrastive_data_loader(source,
 
     # Zip the datasets for the different views
     zipped_dataset = tf.data.Dataset.zip(tuple(loaders))
-
-    # Apply shuffle *after* zipping might be better if buffer_size is large
-    # and memory is a concern, but shuffling before mapping ensures more randomness
-    # across files earlier. Let's keep shuffle before mapping for now.
-    # If shuffling after:
-    # shuffle_buffer_size = max(buffer_size // batch_size, 2)
-    # print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})")
-    print(f"\n\nUsing shuffle buffer size: {buffer_size}")
+    ## ========================= DUMMY CODE ==========================================
     zipped_dataset = zipped_dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
-    
-    
-    final_loader = zipped_dataset.batch(batch_size)
-    final_loader = final_loader.cache() # Cache after batching if memory allows
+    # 2. Define the padded shapes. This is the contract for the final tensor shape.
+    #    This structure MUST match the dictionary returned by your `augmentation` function.
+    view_shape = {
+        'input': tf.TensorShape([build_seq_len, 1]),
+        'times': tf.TensorShape([build_seq_len, 1]),
+        'band_info': tf.TensorShape([build_seq_len, 1]),
+        'mask': tf.TensorShape([build_seq_len])
+    }   
+    padded_view_shapes = (view_shape,) * n_views
+    # 3. Define the padding values.
+    padded_view_values = {
+        'input': tf.constant(0.0, dtype=tf.float32),
+        'times': tf.constant(0.0, dtype=tf.float32),
+        'band_info': tf.constant(0.0, dtype=tf.float32),
+        'mask': tf.constant(1.0, dtype=tf.float32) # Check if your mask should be padded with 0 or 1
+    }
+    final_padding_values = (padded_view_values,) * n_views
+
+    # 4. Use padded_batch. This will take the variable-length outputs from .map()
+    #    and pad them all to `final_build_seq_len`.
+    final_loader = zipped_dataset.padded_batch(
+        batch_size=batch_size,
+        padded_shapes=padded_view_shapes,
+        padding_values=final_padding_values,
+        drop_remainder=True  # ESSENTIAL for multi-GPU training
+    )
+    final_loader = final_loader.cache()
     final_loader = final_loader.prefetch(buffer_size=AUTO)
+
     return final_loader
+    
+
+
+
+
+
+    ## ========================== DUMMY CODE ==========================================
+
+    # # Apply shuffle *after* zipping might be better if buffer_size is large
+    # # and memory is a concern, but shuffling before mapping ensures more randomness
+    # # across files earlier. Let's keep shuffle before mapping for now.
+    # # If shuffling after:
+    # # shuffle_buffer_size = max(buffer_size // batch_size, 2)
+    # # print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})")
+    # print(f"\n\nUsing shuffle buffer size: {buffer_size}")
+    # zipped_dataset = zipped_dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
+    
+    
+    # final_loader = zipped_dataset.batch(batch_size)
+    # final_loader = final_loader.cache() # Cache after batching if memory allows
+    # final_loader = final_loader.prefetch(buffer_size=AUTO)
+    # return final_loader
 
 
 

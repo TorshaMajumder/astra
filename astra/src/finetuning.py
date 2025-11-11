@@ -46,7 +46,7 @@ def finetune_data_loader(source_dir,
         magerr = input_dict['input_id'][:, 2]
         last_index = input_dict['last_index']
         
-        start_index = tf.constant(0, dtype=tf.int64)
+        start_index = tf.constant(0, dtype=tf.int32)
         is_candidate = tf.constant(False, dtype=tf.bool)
 
         # Loop through the bands to calculate weighted mean for each

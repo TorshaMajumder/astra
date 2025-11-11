@@ -370,6 +370,17 @@ def contrastive_train(model,
             except Exception as e:
                 print(f"\n\nError during train_step (Epoch {epoch+1}, Step {num_train_batches}): {e}")
                 continue # Skip this batch
+        # ========================== ROBUSTNESS CHECK (TRAINING) ==========================
+        if num_train_batches == 0:
+            print("\n\n" + "="*80)
+            print("FATAL ERROR: The training dataset was empty or smaller than the batch size.")
+            print(f"Please check the data at 'path_to_read' and ensure it contains enough samples.")
+            print("Aborting training run.")
+            print("="*80 + "\n")
+            
+            # Stop the training loop entirely
+            break 
+        # ========================== END OF CHECK =======================================
         # ----------------------------------------------------------------------
         # Calculate average training loss for the epoch
         # 
@@ -395,9 +406,9 @@ def contrastive_train(model,
                     num_val_batches += 1
                     pbar_val.set_postfix({'Val Loss': f'{current_val_loss.numpy():.4f}'})
                     # Log step-wise loss to TensorBoard (optional)
-                    if summary_writer and global_step_val % 10 == 0:
-                        with summary_writer.as_default(step=global_step_val):
-                            tf.summary.scalar('loss/step_val', current_val_loss, description="Validation loss per step")
+                    # if summary_writer and global_step_val % 10 == 0:
+                    #     with summary_writer.as_default(step=global_step_val):
+                    #         tf.summary.scalar('loss/step_val', current_val_loss, description="Validation loss per step")
                     
                     global_step_val += 1
                         
@@ -405,15 +416,26 @@ def contrastive_train(model,
                     print(f"\n\nError during validation_step (Epoch {epoch+1}, Step {num_val_batches}): {e}")
                     continue # Skip batch
 
+            if num_val_batches > 0:
+                mean_epoch_val_loss = total_val_loss / num_val_batches
+            else:
+                # Handle the case where the validation set was empty.
+                # Set a default value and print a helpful warning.
+                mean_epoch_val_loss = np.inf # Use infinity so it won't be saved as the "best" model
+                print("\nWarning: The validation dataset was empty or smaller than the batch size. No validation metrics were calculated for this epoch.")
+            # mean_epoch_val_loss = total_val_loss / num_val_batches
+            # epoch_wise_val_loss.append(mean_epoch_val_loss.numpy())
+            epoch_wise_val_loss.append(mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss)
 
-            mean_epoch_val_loss = total_val_loss / num_val_batches
-            epoch_wise_val_loss.append(mean_epoch_val_loss.numpy())
         #------------------------------ End Validation Epoch -----------------------
         # ------------------------- END OF EPOCH SUMMARY & LOGGING -------------------------
         #  Print Epoch Summary
         # 
-        val_loss_str = f"{mean_epoch_val_loss.numpy():.5f}" if distributed_val_dataset else "N/A"
-        print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}")
+        # val_loss_str = f"{mean_epoch_val_loss.numpy():.5f}" if distributed_val_dataset else "N/A"
+        # print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}")
+        val_loss_for_print = mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss
+        val_loss_str = f"{val_loss_for_print:.5f}" if np.isfinite(val_loss_for_print) else "N/A"
+        print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}")      
         #
         current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
         #
@@ -432,17 +454,24 @@ def contrastive_train(model,
         if summary_writer:
             with summary_writer.as_default(step=epoch):
                 tf.summary.scalar('loss/epoch_train', mean_epoch_train_loss)
-                if valid_loader:
-                    tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
+                # Only log the validation loss if it's a finite number
+                val_loss_for_log = mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss
+                if np.isfinite(val_loss_for_log):
+                    tf.summary.scalar('loss/epoch_val', val_loss_for_log)
+                # if valid_loader:
+                #     tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
         #
         # --- Checkpointing and Early Stopping based on Validation Loss ---
         #
-        current_best_metric = mean_epoch_val_loss if distributed_val_dataset else mean_epoch_train_loss # Use train loss if no validation
+        current_metric_for_saving = mean_epoch_val_loss if distributed_val_dataset else mean_epoch_train_loss # Use train loss if no validation
+        # Convert to a plain number before comparison and printing
+        current_best_metric = current_metric_for_saving.numpy() if hasattr(current_metric_for_saving, 'numpy') else current_metric_for_saving
         #
         # Early Stopping Check
         #
+
         if current_best_metric < best_val_loss: # Compare with best_val_loss tracker
             status_prefix = f"Val loss" if distributed_val_dataset else f"Train loss"
             print(f"\n  --{status_prefix} improved from {best_val_loss:.5f} to {current_best_metric:.5f}.")

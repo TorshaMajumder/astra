@@ -59,6 +59,6 @@ initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 #lr = 1e-4            # Use initial_lr in train function if not using schedule. 
 use_custom_schedule: True
 warmup_steps: 4000
-buffer_size: 10000    # Shuffle buffer size
+buffer_size: 21000    # Shuffle buffer size for CPU training, 50000 for GPU training.
 
                       
