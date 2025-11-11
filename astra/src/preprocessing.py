@@ -53,7 +53,7 @@ def get_window(current_serie, mask_serie, max_len, num_cols):
 
 
 @tf.function
-def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
+def sliding_window(sequence, build_seq_len, mask, last_index, bands_tensor, max_len):
     """
     Extracts random windows of lightcurves from the sequence if the sequence
     length is larger than max_len, and padding sequence shorter than max_len with zeros.
@@ -61,6 +61,7 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
     Parameters:
     --------------------------------------------------------------------------------------------
       sequence: A tensor of shape [num_steps, num_features])
+      build_seq_len: The final, fixed length required for the entire sequence.
       mask: mask tensor
       last_index: a tensor of the indices of the last index of each band in the sequence.
       bands_tensor: the bands in the sequence.
@@ -68,15 +69,15 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
 
     Returns:
     --------------------------------------------------------------------------------------------
-      result_series: An updated sequence with max_len.
-      result_mask: An updated mask tensor with corresponding masks.
+      final_series: An updated sequence with max_len.
+      final_mask: An updated mask tensor with corresponding masks.
     """
     #
     #
     #
     series = []
     mask_series = []
-    idx = tf.cast(0, dtype=tf.int64)
+    idx = tf.cast(0, dtype=tf.int32)
     num_cols = tf.shape(sequence)[1]
     #
     # Find the available bands in the sequence, otherwise return -1
@@ -85,8 +86,8 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
     #
     band_indices = {band: tf.cond(
         tf.reduce_any(tf.equal(bands_tensor, band)),
-        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int64),
-        lambda: tf.constant(-1, dtype=tf.int64)) for band in ztf_band.keys()}
+        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int32),
+        lambda: tf.constant(-1, dtype=tf.int32)) for band in ztf_band.keys()}
     #
     for fil in ztf_band.keys():
       index_in_bands = band_indices[fil]
@@ -113,9 +114,23 @@ def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
       series.append(current_serie)
       mask_series.append(mask_serie)
     #
-    result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
+    # =========================== DUMMY CODE ============================================
     #
-    return result_series, result_mask
+    #
+    # Pad the sequence and mask with 0 and 1 respectively to make the final length as "build_seq_len"
+    #
+    # 1. First, combine the processed bands from the lists into single tensors.
+    combined_series = tf.concat(series, axis=0)
+    combined_mask = tf.concat(mask_series, axis=0)
+    # 2. Now, use your existing `get_window` function to adjust the *entire combined sequence*
+    #    to the final `build_seq_len`. This handles both padding (if too short) and
+    #    truncating (if too long) in one clean operation.
+    final_series, final_mask = get_window(combined_series, combined_mask, build_seq_len, num_cols)
+    # #
+    # result_series, result_mask = tf.concat(series, axis=0), tf.concat(mask_series, axis=0)
+    # #
+    # return result_series, result_mask
+    return final_series, final_mask
 
 
 
@@ -277,10 +292,10 @@ def deserialize(sample):
     sequence_features = dict()
     casted_inp_parameters = []
 
-    context_features = {'label': tf.io.FixedLenFeature([],dtype=tf.string),
+    context_features = {
                         'bands': tf.io.VarLenFeature(dtype=tf.string),
-                        'last_index': tf.io.VarLenFeature(dtype=tf.int64),
-                        'id': tf.io.FixedLenFeature([], dtype=tf.int64)}
+                        'last_index': tf.io.VarLenFeature(dtype=tf.int64)
+                        }
     for i in range(num_keys):
         sequence_features['dim_{}'.format(i)] = tf.io.VarLenFeature(dtype=tf.float32)
 
@@ -290,10 +305,12 @@ def deserialize(sample):
                             sequence_features=sequence_features
                             )
 
-    input_dict['id']   = tf.cast(context['id'], tf.int64)
+    # input_dict['id']   = tf.cast(context['id'], tf.int64)
     input_dict['last_index'] = tf.sparse.to_dense(context['last_index'])
-    input_dict['label']  = tf.cast(context['label'], tf.string)
+    input_dict['last_index'] = tf.cast(input_dict['last_index'], tf.int32)
     input_dict['bands']  = tf.sparse.to_dense(context['bands'])
+
+    # tf.print(input_dict['last_index'].dtype)
 
 
     for i in range(num_keys):
@@ -312,6 +329,7 @@ def deserialize(sample):
 @tf.function
 def augmentation(data,
                  noise_level=0.1,
+                 build_seq_len=None,
                  apply_white_noise=False,
                  apply_binning=False,
                  apply_outlier=False,
@@ -377,7 +395,7 @@ def augmentation(data,
     #
     # Apply sliding_window for a fixed length sequence
     #
-    new_input, mask = sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
+    new_input, mask = sliding_window(new_input, build_seq_len, mask, input_dict['last_index'], input_dict['bands'], maxlen)
     #
     #
     #
@@ -403,15 +421,16 @@ def augmentation(data,
     input_seq['mask'] = mask
     # input_seq['last_index'] = input_dict['last_index']
     # input_seq['bands'] = input_dict['bands']
-    # input_seq['id'] = input_dict['id']
+    # # input_seq['id'] = input_dict['id']
     # input_seq['label'] = input_dict['label']
-    #
+    
     return input_seq
 
 def contrastive_data_loader(source,
                             n_views=3,
-                            seed=1024,
+                            seed=np.random.seed(1024),
                             batch_size=100,
+                            build_seq_len=None,
                             apply_white_noise=(False, True, True), 
                             noise_levels=(0.0, 0.1, 0.2), 
                             apply_binning=(False, False, True), 
@@ -486,6 +505,7 @@ def contrastive_data_loader(source,
         aug_fn = lambda data, idx=i: augmentation(data,
                                                    apply_white_noise=apply_white_noise[idx],
                                                    noise_level=noise_levels[idx],
+                                                   build_seq_len=build_seq_len,
                                                    apply_binning=apply_binning[idx],
                                                    apply_outlier=apply_outlier[idx],
                                                    maxlen=maxlens[idx],
@@ -501,15 +521,15 @@ def contrastive_data_loader(source,
     # and memory is a concern, but shuffling before mapping ensures more randomness
     # across files earlier. Let's keep shuffle before mapping for now.
     # If shuffling after:
-    shuffle_buffer_size = max(buffer_size // batch_size, 2)
-    print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})")
-    zipped_dataset = zipped_dataset.shuffle(buffer_size=shuffle_buffer_size, seed=seed, reshuffle_each_iteration=True)
+    # shuffle_buffer_size = max(buffer_size // batch_size, 2)
+    # print(f"\n\nUsing shuffle buffer size: {shuffle_buffer_size} (Based on input buffer_size={buffer_size})")
+    print(f"\n\nUsing shuffle buffer size: {buffer_size}")
+    zipped_dataset = zipped_dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
     
-    # The current `get_window` already does this. So, `batch` should be sufficient.
+    
     final_loader = zipped_dataset.batch(batch_size)
     final_loader = final_loader.cache() # Cache after batching if memory allows
     final_loader = final_loader.prefetch(buffer_size=AUTO)
-    #external/local_xla/xla/tsl/framework/cpu_allocator_impl.cc:83] Allocation of 276480000 exceeds 10% of free system memory.
     return final_loader
 
 
@@ -518,7 +538,7 @@ def create_inference_loader(source,
                             batch_size,
                             maxlen, # The fixed sequence length the encoder expects
                             shuffle=False, # Shuffling is not needed for inference/evaluation
-                            seed=None):
+                            seed=np.random.seed(1024)):
     """
     Creates a tf.data.Dataset for inference/evaluation.
 

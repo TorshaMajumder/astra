@@ -222,7 +222,7 @@ def contrastive_training(args):
         # --- Build the model with a dummy call (still recommended) ---
         print("\n\nBuilding model with dummy input...\n\n")
         # Use the sum of the maxlens as the sequence length for the dummy input
-        build_seq_len = sum(config['maxlens'][0].values()) 
+        build_seq_len = tf.cast(sum(config['maxlens'][0].values()), tf.int32)  # Final fixed length for sequences
         dummy_input = {
             'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
             'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
@@ -243,6 +243,7 @@ def contrastive_training(args):
                                                         model=model,
                                                         strategy=strategy,
                                                         optimizer=optimizer,
+                                                        build_seq_len=build_seq_len,
                                                         path_to_read=hparams["data_params"]["path_to_read"],
                                                         path_to_val=hparams["data_params"]["path_to_val"],
                                                         path_to_save=hparams["data_params"]["path_to_save"],
