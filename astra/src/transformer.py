@@ -143,41 +143,29 @@ def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_i
     """
     Performs one distributed training step.
     """
-    # This function will be executed on each replica (GPU).
-    def step_fn(inputs):
+    def train_step(inputs):
         # Unpack the views for this replica's mini-batch
         *views_batch, = inputs
 
         with tf.GradientTape() as tape:
             # Get projections from the model
             z_views = [model(view, training=True) for view in views_batch]
-            
             # Calculate the loss for this replica's mini-batch
-            per_replica_loss = nt_xent_loss(*z_views, temperature=temperature)
-            
+            loss = nt_xent_loss(*z_views, temperature=temperature)
             # IMPORTANT: Scale the loss by the GLOBAL batch size.
             # This ensures the gradients are correctly averaged, not summed.
-            scaled_loss = tf.nn.compute_average_loss(per_replica_loss, global_batch_size=global_batch_size)
+            scaled_loss = tf.nn.compute_average_loss(loss, global_batch_size=global_batch_size)
 
-        # Calculate gradients and apply them
+            
+
         grads = tape.gradient(scaled_loss, model.trainable_variables)
-        # Optional: Gradient Clipping
         grads, _ = tf.clip_by_global_norm(grads, 1.0)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
-        
-        # Return the raw loss for this replica. We'll aggregate it later.
-        #return per_replica_loss
-        # --- THIS IS THE FIX ---
-        # Instead of returning the whole vector, return the scalar mean for this replica.
-        return tf.reduce_mean(per_replica_loss)
-        # --- END OF FIX ---
-
-    # Use strategy.run to execute step_fn on each replica in parallel.
-    per_replica_losses = strategy.run(step_fn, args=(dist_inputs,))
+        return tf.reduce_mean(loss)
     
-    # Aggregate the losses from all replicas. Using MEAN is often more intuitive for logging.
-    # This gives you the average loss over the entire global batch.
-    return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
+    per_replica_losses = strategy.run(train_step, args=(dist_inputs,))
+    return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
 
 # ==========================================================
 # 2. DEFINE THE DISTRIBUTED VALIDATION STEP
@@ -187,19 +175,16 @@ def distributed_validation_step(model, strategy, dist_inputs, temperature):
     """
     Performs one distributed validation step.
     """
-    def step_fn(inputs):
+    def valid_step(inputs):
         *views_batch, = inputs
-        z_views = [model(view, training=False) for view in views_batch] # training=False
-        per_replica_loss = nt_xent_loss(*z_views, temperature=temperature)
-        # --- THIS IS THE FIX ---
-        # Return the scalar mean for this replica.
-        return tf.reduce_mean(per_replica_loss)
-        # --- END OF FIX ---
-
-    per_replica_losses = strategy.run(step_fn, args=(dist_inputs,))
+        z_views = [model(view, training=False) for view in views_batch] 
+        loss = nt_xent_loss(*z_views, temperature=temperature)
+        return tf.reduce_mean(loss)
+    
+    per_replica_losses = strategy.run(valid_step, args=(dist_inputs,))
     return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
-       
+    
 
 
 
@@ -213,7 +198,7 @@ def contrastive_train(model,
           path_to_val="",
           path_to_save=None,
           n_views=3,
-          batch_size=50,
+          global_batch_size=50,
           temperature=0.1, # Default from SimCLR
           patience=20,
           epochs=10, # Increased default epochs
@@ -263,7 +248,7 @@ def contrastive_train(model,
                                                     source=path_to_read,
                                                     n_views=n_views, 
                                                     seed=np.random.randint(1024), 
-                                                    batch_size=batch_size,
+                                                    batch_size=global_batch_size,
                                                     build_seq_len=build_seq_len,
                                                     apply_white_noise=apply_white_noise,
                                                     noise_levels=noise_levels,
@@ -300,7 +285,7 @@ def contrastive_train(model,
                                                     source=path_to_val,
                                                     n_views=n_views, 
                                                     seed=np.random.randint(1024), # Use different seed maybe?
-                                                    batch_size=batch_size,
+                                                    batch_size=global_batch_size,
                                                     build_seq_len=build_seq_len,
                                                     apply_white_noise=apply_white_noise,
                                                     noise_levels=noise_levels,
@@ -347,10 +332,10 @@ def contrastive_train(model,
         # -------- setup the progress bar --------------------------------------------------------
         pbar_train = tqdm(distributed_train_dataset, desc=f'Epoch {epoch + 1}/{epochs} (Train)', leave=False)
         # ----------------------------------------------------------------------------------------
-        for step, views in enumerate(pbar_train):
+        for step, batch in enumerate(pbar_train):
             try:
                 # Call the distributed train step function to get the loss for this global batch
-                current_train_loss = distributed_train_step(model, optimizer, strategy, batch_size, views, temperature)
+                current_train_loss = distributed_train_step(model, optimizer, strategy, global_batch_size, batch, temperature)
                 total_train_loss += current_train_loss
                 num_train_batches += 1
 
@@ -399,18 +384,12 @@ def contrastive_train(model,
             model.trainable = False # Set model to non-trainable for validation
             pbar_val = tqdm(distributed_val_dataset, desc=f'Epoch {epoch + 1}/{epochs} (Val)', leave=False)
         
-            for step, views in enumerate(pbar_val):
+            for step, batch in enumerate(pbar_val):
                 try:
-                    current_val_loss = distributed_validation_step(model, strategy, views, temperature)
+                    current_val_loss = distributed_validation_step(model, strategy, batch, temperature)
                     total_val_loss += current_val_loss
                     num_val_batches += 1
                     pbar_val.set_postfix({'Val Loss': f'{current_val_loss.numpy():.4f}'})
-                    # Log step-wise loss to TensorBoard (optional)
-                    # if summary_writer and global_step_val % 10 == 0:
-                    #     with summary_writer.as_default(step=global_step_val):
-                    #         tf.summary.scalar('loss/step_val', current_val_loss, description="Validation loss per step")
-                    
-                    global_step_val += 1
                         
                 except Exception as e:
                     print(f"\n\nError during validation_step (Epoch {epoch+1}, Step {num_val_batches}): {e}")
@@ -428,20 +407,18 @@ def contrastive_train(model,
             epoch_wise_val_loss.append(mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss)
 
         #------------------------------ End Validation Epoch -----------------------
-        # ------------------------- END OF EPOCH SUMMARY & LOGGING -------------------------
+        #------------------------- END OF EPOCH SUMMARY & LOGGING -------------------------
         #  Print Epoch Summary
         # 
-        # val_loss_str = f"{mean_epoch_val_loss.numpy():.5f}" if distributed_val_dataset else "N/A"
-        # print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}")
         val_loss_for_print = mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss
         val_loss_str = f"{val_loss_for_print:.5f}" if np.isfinite(val_loss_for_print) else "N/A"
-        print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}")      
+        print(f"\nEpoch {epoch + 1}/{epochs} -> Train Loss: {mean_epoch_train_loss.numpy():.5f} | Val Loss: {val_loss_str}" )      
         #
         current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
         #
         # Remove MLflow logging before packaging
         #
-        # === MLFLOW METRIC LOGGING ===
+        # ============  MLFLOW METRIC LOGGING ===
         #
         #
         # 
@@ -450,7 +427,6 @@ def contrastive_train(model,
         mlflow.log_metric("learning_rate", current_lr, step=epoch)
         # =============================
         # Log epoch metrics to TensorBoard
-        # Log epoch metrics to TensorBoard
         if summary_writer:
             with summary_writer.as_default(step=epoch):
                 tf.summary.scalar('loss/epoch_train', mean_epoch_train_loss)
@@ -458,8 +434,6 @@ def contrastive_train(model,
                 val_loss_for_log = mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss
                 if np.isfinite(val_loss_for_log):
                     tf.summary.scalar('loss/epoch_val', val_loss_for_log)
-                # if valid_loader:
-                #     tf.summary.scalar('loss/epoch_val', mean_epoch_val_loss)
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
         #
@@ -509,7 +483,7 @@ def contrastive_train(model,
     print("\n\nTraining finished.")
     #
     # Remove MLflow logging before packaging
-    #    # === MLFLOW MODEL LOGGING ===
+    ## ============================ MLFLOW MODEL LOGGING ====================
     #
     #
     if best_weights_path:
@@ -528,5 +502,4 @@ def contrastive_train(model,
     else:
          print("\n\nNo weights were saved (either no improvement found or path issue).")
 
-    return epoch_wise_train_loss, epoch_wise_val_loss # Return both histories
-
+    return epoch_wise_train_loss, epoch_wise_val_loss 

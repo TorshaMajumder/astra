@@ -80,9 +80,9 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 
 # 3. MultiHeadAttention Layer
-class MultiHeadAttention(layers.Layer):
+class AstraMultiHeadAttention(layers.Layer):
     def __init__(self, d_model, num_heads):
-        super(MultiHeadAttention, self).__init__()
+        super(AstraMultiHeadAttention, self).__init__()
         self.num_heads = num_heads
         self.d_model = d_model
 
@@ -162,7 +162,7 @@ class EncoderLayer(layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, use_res=True, **kwargs):
         super(EncoderLayer, self).__init__(**kwargs)
 
-        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.mha = AstraMultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
         self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)

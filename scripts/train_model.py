@@ -91,8 +91,8 @@ def contrastive_training(args):
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
-    mlflow.set_tracking_uri("http://localhost:5000")
-    mlflow.set_experiment("Pre-training-AstraNet-Experiments")
+    mlflow.set_tracking_uri("http://127.0.0.1:39105")
+    mlflow.set_experiment("Pre-training-AstraNet-Experiments-Test")
     # ===============================================
     # Load the YAML configuration file
     #
@@ -179,14 +179,14 @@ def contrastive_training(args):
     # Change the "run_name" to the format - {run_timestamp}_server_name"
     # --- Start MLflow Run ---
     #
-    with mlflow.start_run(run_name=f"{run_timestamp}_COIN") as run:
+    with mlflow.start_run(run_name=f"{run_timestamp}_NVIDIA") as run:
         #
         # Add a tag for easier filtering (optional but good practice)
         mlflow.set_tag("model_type", "AstraNet")
         # ===============================================
         # Change the "run_name" to the format - {run_timestamp}_server_name"
         #
-        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
+        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_NVIDIA\n\n")
         # ===============================================
         # Instantiate Model
         # --- Use the strategy scope to create the model and optimizer ---
@@ -216,24 +216,25 @@ def contrastive_training(args):
             else:
                 optimizer = tf.keras.optimizers.Adam(learning_rate=config['initial_lr'])
             # --- END OF CHANGE ---
-        #
-        # Dummy call to build the model (optional but good practice)
-        # Need example input shapes - derive from maxlens
-        # --- Build the model with a dummy call (still recommended) ---
-        print("\n\nBuilding model with dummy input...\n\n")
-        # Use the sum of the maxlens as the sequence length for the dummy input
-        build_seq_len = tf.cast(sum(config['maxlens'][0].values()), tf.int32)  # Final fixed length for sequences
-        dummy_input = {
-            'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-            'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-            'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
-        }
-        # Perform the dummy call
-        _ = model(dummy_input,  training=False)
-        # Print the model summary
-        model.summary()
-        # ===============================================
+        
+            #
+            # Dummy call to build the model (optional but good practice)
+            # Need example input shapes - derive from maxlens
+            # --- Build the model with a dummy call (still recommended) ---
+            print("\n\nBuilding model with dummy input...\n\n")
+            # Use the sum of the maxlens as the sequence length for the dummy input
+            build_seq_len = tf.cast(sum(config['maxlens'][0].values()), tf.int32)  # Final fixed length for sequences
+            dummy_input = {
+                'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+                'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+                'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+                'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
+            }
+            # Perform the dummy call
+            _ = model(dummy_input,  training=False)
+            # Print the model summary
+            model.summary()
+            # ===============================================
         #
         #
         # Start Training
@@ -248,7 +249,7 @@ def contrastive_training(args):
                                                         path_to_val=hparams["data_params"]["path_to_val"],
                                                         path_to_save=hparams["data_params"]["path_to_save"],
                                                         n_views=hparams["model_params"]["n_views"],
-                                                        batch_size=global_batch_size,
+                                                        global_batch_size=global_batch_size,
                                                         temperature=hparams["training_params"]["temperature"],
                                                         patience=hparams["training_params"]["patience"],
                                                         epochs=hparams["training_params"]["epochs"],
@@ -265,12 +266,12 @@ def contrastive_training(args):
                                                         buffer_size=hparams["data_params"]["buffer_size"]
                                                     )
 
-    
+
         # ----- Log all parameters from the dictionary ---
         # This will log everything from your YAML file
         mlflow.log_params(hparams)
         # ===============================================
-        print("\n\nRun logged to MLflow.")
+        # print("\n\nRun logged to MLflow.")
         #
         #
         # ================ END ==========================
