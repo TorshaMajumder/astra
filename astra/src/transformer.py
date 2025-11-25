@@ -1,8 +1,9 @@
+# =========================================================
+# Import all dependencies
+# =========================================================
 import os
 import mlflow
-import logging
 import traceback
-import datetime 
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
@@ -13,47 +14,47 @@ from astra.src.loss import nt_xent_loss
 from astra.src.header import ProjectionHead
 from astra.src.embedding import AstraEmbedding
 from astra.src.preprocessing import contrastive_data_loader
-from astra.src.scheduler import CustomSchedule, warmup_schedule
-
-
-logging.getLogger('tensorflow').setLevel(logging.ERROR)  
-os.system('clear')
 
 
 class AstraNet(tf.keras.Model):
-    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1,
-                 base=10000.0, use_res=True, use_band_info=True,
+    def __init__(self, num_layers, d_model, num_heads, dff, 
+                 base=10000.0, use_res=True, use_band_info=True, rate=0.1,
                  use_drop=False, mjd=True, projection_dim=None, name="astra_net", **kwargs):
         super(AstraNet, self).__init__(name=name, **kwargs)
 
-
-        self.d_model = d_model
-        self.num_layers=num_layers
-        self.num_heads=num_heads
         self.dff=dff
+        self.mjd=mjd
         self.rate=rate
         self.base=base
         self.use_res=use_res
-        self.use_band_info=use_band_info
+        self.d_model = d_model
         self.use_drop=use_drop
-        self.mjd=mjd
+        self.num_heads=num_heads
+        self.num_layers=num_layers
+        self.use_band_info=use_band_info
         self.projection_dim=projection_dim
-        # 1. Instantiate Embedding Layer
+        #
+        # Instantiate Embedding Layer
+        #
         self.embedding_layer = AstraEmbedding(
-                                                    d_model=d_model, base=base, rate=rate, # Pass shared rate
-                                                    use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
-                                                )
-
-        # 2. Instantiate Encoder Layer
+                                                d_model=d_model, base=base, rate=rate, 
+                                                use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
+                                            )
+        #
+        # Instantiate Encoder Layer
+        #
         self.encoder = Encoder(
-                                    num_layers=num_layers, d_model=d_model, num_heads=num_heads,
-                                    dff=dff, rate=rate, use_res=use_res 
-                                )
-        # 3. Instantiate Pooling Layer
+                                num_layers=num_layers, d_model=d_model, 
+                                num_heads=num_heads, dff=dff, rate=rate, use_res=use_res 
+                            )
+        #
+        # Instantiate Pooling Layer
         # Using Global Average Pooling as default
+        #
         self.pooling = layers.GlobalAveragePooling1D(name='avg_pooling')
-
-        # 4. Instantiate Projection Head Layer
+        #
+        # Instantiate Projection Head Layer
+        #
         self.projection_head_layer = ProjectionHead(
                                                         d_model=d_model, 
                                                         projection_dim=projection_dim
@@ -64,71 +65,67 @@ class AstraNet(tf.keras.Model):
     
     def call(self, x, training=False):
         """
-        Forward pass through the AstraNet.
-
-        Args:
+        Parameters:
+        -----------------------------------------------------------------------
             x (dict): Input dictionary containing:
                 'input': Magnitude tensor (batch, seq_len, 1)
                 'times': Time tensor (batch, seq_len, 1)
                 'band_info': Band tensor (batch, seq_len, 1) (optional)
                 'mask': Mask tensor (batch, seq_len) or (batch, seq_len, 1)
-            training (bool): Flag for training mode (affects Dropout, BN).
+            training (bool): Flag for training mode 
 
         Returns:
+        -----------------------------------------------------------------------
             tf.Tensor: Final output tensor, usually after projection head.
                        Shape: (batch_size, projection_dim) or (batch_size, d_model) if no projection.
         """
-        if not isinstance(x, dict) or not all(k in x for k in ['input', 'times', 'mask']):
-             raise ValueError("Input 'x' must be a dictionary containing at least 'input', 'times', and 'mask'.")
-        
-        mask = x['mask']       # (batch, seq_len) - ensure last dim is squeezed
+        if not isinstance(x, dict) or not all(k in x for k in ['input', 'times', 'mask', 'band_info']):
+             raise ValueError("\nInput 'x' must be a dictionary containing 'input', 'times', 'band_info' and 'mask'.\n")
+        #
         # Ensure mask has the correct shape (batch, seq_len) for Encoder/Pooling
+        # ensure last dim is squeezed
+        mask = x['mask']       
         if len(mask.shape) == 3 and tf.shape(mask)[-1] == 1:
              mask = tf.squeeze(mask, axis=-1)
         elif len(mask.shape) != 2:
-             raise ValueError(f"Unexpected mask shape in AstraNet: {tf.shape(mask)}. Expected (batch, seq_len).")
-
-        # 1. Apply Embedding Layer (takes the dictionary 'x')
+             raise ValueError(f"\nUnexpected mask shape in AstraNet: {tf.shape(mask)}. Expected (batch, seq_len).\n")
+        # Apply Embedding Layer (takes the dictionary 'x')
         # Pass training flag for potential dropout in embedding
         embeddings = self.embedding_layer(x, training=training) # (batch, seq_len, d_model)
-
-        # 2. Apply Encoder (takes embeddings and mask)
+        # Apply Encoder (takes embeddings and mask)
         # Pass training flag for dropout/LN in encoder
         enc_output, all_attention_weights = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
-
-        # 3. Apply Pooling
+        # Apply Pooling
         # Invert mask for pooling (True where elements should be KEPT)
         pool_mask = tf.logical_not(tf.cast(mask, tf.bool))
         pooled_output = self.pooling(enc_output, mask=pool_mask) # (batch, d_model)
+        # Apply Projection Head 
+        # Pass training flag if projection head had dropout/BN 
+        final_output = self.projection_head_layer(pooled_output, training=training) # (batch, projection_dim)
+        #
+        return final_output 
 
-        # 4. Apply Projection Head 
-        # Pass training flag if projection head had dropout/BN (currently doesn't)
-        final_output = self.projection_head_layer(pooled_output, training=training) # (batch, projection_dim or d_model)
-
-        return final_output # Return the final output tensor
-
-    # === SOLUTION: Implement get_config ===
     def get_config(self):
         # Start with the base class's config.
         config = super(AstraNet, self).get_config()
-        
+        #
         # Update it with the custom arguments from __init__.
+        #
         config.update({
-            "num_layers": self.num_layers,
-            "d_model": self.d_model,
-            "num_heads": self.num_heads,
-            "dff": self.dff,
-            "rate": self.rate,
-            "base": self.base,
-            "use_res": self.use_res,
-            "use_band_info": self.use_band_info,
-            "use_drop": self.use_drop,
-            "mjd": self.mjd,
-            "projection_dim": self.projection_dim,
-        })
+                        "dff": self.dff,
+                        "mjd": self.mjd,
+                        "rate": self.rate,
+                        "base": self.base,
+                        "use_res": self.use_res,
+                        "d_model": self.d_model,
+                        "use_drop": self.use_drop,
+                        "num_heads": self.num_heads,
+                        "num_layers": self.num_layers,
+                        "use_band_info": self.use_band_info,
+                        "projection_dim": self.projection_dim,
+                    })
         return config
 
-    # === SOLUTION: Implement from_config ===
     @classmethod
     def from_config(cls, config):
         # This creates a new instance of the model from the config dictionary.
@@ -136,7 +133,7 @@ class AstraNet(tf.keras.Model):
 
 
 # ==========================================================
-# 1. DEFINE THE DISTRIBUTED TRAINING STEP
+# DEFINE THE DISTRIBUTED TRAINING STEP
 # ==========================================================
 @tf.function
 def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_inputs, temperature):
@@ -144,7 +141,9 @@ def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_i
     Performs one distributed training step.
     """
     def train_step(inputs):
-        # Unpack the views for this replica's mini-batch
+        #
+        # Unpack the views for the current replica's mini-batch
+        #
         *views_batch, = inputs
 
         with tf.GradientTape() as tape:
@@ -155,9 +154,8 @@ def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_i
             # IMPORTANT: Scale the loss by the GLOBAL batch size.
             # This ensures the gradients are correctly averaged, not summed.
             scaled_loss = tf.nn.compute_average_loss(loss, global_batch_size=global_batch_size)
-
-            
-
+        
+        # Compute gradients
         grads = tape.gradient(scaled_loss, model.trainable_variables)
         grads, _ = tf.clip_by_global_norm(grads, 1.0)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
@@ -168,7 +166,7 @@ def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_i
 
 
 # ==========================================================
-# 2. DEFINE THE DISTRIBUTED VALIDATION STEP
+# DEFINE THE DISTRIBUTED VALIDATION STEP
 # ==========================================================
 @tf.function
 def distributed_validation_step(model, strategy, dist_inputs, temperature):
