@@ -94,8 +94,8 @@ def contrastive_training(args):
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
-    mlflow.set_tracking_uri("http://127.0.0.1:39105")
-    mlflow.set_experiment("Pre-training-AstraNet-Experiments-Test")
+    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+    mlflow.set_experiment("Set1")
     # ===============================================
     # Load the YAML configuration file
     #
@@ -298,13 +298,14 @@ def main():
     parser.add_argument('--loss', type=str, required=True, help='Provide the loss function as contrastive or clustering.' \
                                                                 ' NOTE: clustering not yet implemented. We currently support contrastive loss only.')
     parser.add_argument('--config', type=str, required=True, help='Path to the YAML configuration file.')
+    parser.add_argument('--batch_size', type=int, required=True, help='Provide per-GPU batch_size or batch_size for CPU. ' \
+                                                                        'Overrides the batch size from the config file.'
+                                                                        'NOTE (for GPU only): GLOBAL_BATCH_SIZE = (batch_size * num_gpus).')
     # ==========================================================
     # Optional arguments to override config file parameters
     # ==========================================================
     parser.add_argument('--epochs', type=int, help='Override the number of epochs from the config file.')
-    parser.add_argument('--batch_size', type=int, help='Provide per-GPU batch_size or batch_size for CPU. ' \
-                                                        'Overrides the batch size from the config file.'
-                                                        'NOTE (for GPU only): GLOBAL_BATCH_SIZE = (batch_size * num_gpus).')
+    
     parser.add_argument('--num_gpus', type=int, default=0, help='Number of GPUs to use for training. Default set to 0 for CPU mode.')
     args = parser.parse_args()
     # ==========================================================
