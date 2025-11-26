@@ -7,14 +7,14 @@ import numpy as np
 import tensorflow as tf
 from astra.utils.helper import standardize
 from astra.bands.bands import ztf_band, ztf_mag
-
-
-logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
+# ===========================================================
+# SUPPRESS TF WARNINGS
+logging.getLogger('tensorflow').setLevel(logging.ERROR)  
 AUTO = tf.data.AUTOTUNE
 os.system('clear')
 tf.random.set_seed(1024)
 np.random.seed(1024)
-
+# ===========================================================
 @tf.function
 def get_window(current_serie, mask_serie, max_len, num_cols):
   #
