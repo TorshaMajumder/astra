@@ -305,7 +305,6 @@ def main():
     # Optional arguments to override config file parameters
     # ==========================================================
     parser.add_argument('--epochs', type=int, help='Override the number of epochs from the config file.')
-    
     parser.add_argument('--num_gpus', type=int, default=0, help='Number of GPUs to use for training. Default set to 0 for CPU mode.')
     args = parser.parse_args()
     # ==========================================================
