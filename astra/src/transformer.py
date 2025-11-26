@@ -133,12 +133,25 @@ class AstraNet(tf.keras.Model):
 
 
 # ==========================================================
-# DEFINE THE DISTRIBUTED TRAINING STEP
+# CONTRASTIVE TRAINING: DISTRIBUTED TRAINING STEP
 # ==========================================================
 @tf.function
 def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_inputs, temperature):
     """
     Performs one distributed training step.
+
+    Parameters:
+    -----------------------------------------------------------------------
+        model (tf.keras.Model): The model to be trained.
+        optimizer (tf.keras.optimizers.Optimizer): The optimizer for training.
+        strategy (tf.distribute.Strategy): The distribution strategy.
+        global_batch_size (int): The total batch size across all replicas.
+        dist_inputs (tf.Tensor): The distributed input batch.
+        temperature (float): Temperature parameter for NT-Xent loss.
+
+    Returns:
+    -----------------------------------------------------------------------
+        tf.Tensor: The mean loss across all replicas for this training step.
     """
     def train_step(inputs):
         #
@@ -166,14 +179,28 @@ def distributed_train_step(model, optimizer, strategy, global_batch_size, dist_i
 
 
 # ==========================================================
-# DEFINE THE DISTRIBUTED VALIDATION STEP
+# CONTRASTIVE TRAINING: DISTRIBUTED VALIDATION STEP
 # ==========================================================
 @tf.function
 def distributed_validation_step(model, strategy, dist_inputs, temperature):
     """
     Performs one distributed validation step.
+
+    Parameters:
+    -----------------------------------------------------------------------
+        model (tf.keras.Model): The model to be trained.
+        strategy (tf.distribute.Strategy): The distribution strategy.
+        dist_inputs (tf.Tensor): The distributed input batch.
+        temperature (float): Temperature parameter for NT-Xent loss.
+
+    Returns:
+    -----------------------------------------------------------------------
+        tf.Tensor: The mean loss across all replicas for this validation step.
     """
     def valid_step(inputs):
+        #
+        # Unpack the views for the current replica's mini-batch
+        #
         *views_batch, = inputs
         z_views = [model(view, training=False) for view in views_batch] 
         loss = nt_xent_loss(*z_views, temperature=temperature)
@@ -183,41 +210,80 @@ def distributed_validation_step(model, strategy, dist_inputs, temperature):
     return strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses, axis=None)
 
     
-
-
-
-
-
+# ==========================================================
+# CONTRASTIVE TRAINING FUNCTION (MAIN)
+# ==========================================================
 def contrastive_train(model,
-          strategy,
-          optimizer,
-          build_seq_len=None,
-          path_to_read="",
-          path_to_val="",
-          path_to_save=None,
-          n_views=3,
-          global_batch_size=50,
-          temperature=0.1, # Default from SimCLR
-          patience=20,
-          epochs=10, # Increased default epochs
-          initial_lr=1e-3, # For Adam optimizer if not using custom schedule
-          use_custom_schedule=True,
-          warmup_steps=4000,
-          apply_white_noise=(False, True, True),
-          noise_levels=(0.0, 0.1, 0.1), # Example noise levels
-          apply_binning=(False, False, True),
-          apply_outlier=(False, False, True),
-          maxlens=(200, 100, 200),
-          bin_widths=(5, 5, 5),
-          drop_rates=(0.0, 0.30, 0.60),
-          buffer_size=100, # Shuffle buffer size
-         ):
+                            strategy,
+                            optimizer,
+                            build_seq_len=None,
+                            path_to_read="",
+                            path_to_val="",
+                            path_to_save=None,
+                            n_views=3,
+                            global_batch_size=50,
+                            temperature=0.1, 
+                            patience=20,
+                            epochs=10, 
+                            initial_lr=1e-3, # For Adam optimizer if not using custom schedule
+                            use_custom_schedule=True,
+                            warmup_steps=4000,
+                            apply_white_noise=(False, True, True),
+                            noise_levels=(0.0, 0.1, 0.1), 
+                            apply_binning=(False, False, True),
+                            apply_outlier=(False, False, True),
+                            maxlens=(200, 100, 200),
+                            bin_widths=(5, 5, 5),
+                            drop_rates=(0.0, 0.30, 0.60),
+                            buffer_size=100, 
+                        ):
 
+    """
+    Trains the model using contrastive learning with distributed strategy.
+    
+    Parameters:
+    -----------------------------------------------------------------------
+        model (tf.keras.Model): The model to be trained.
+        strategy (tf.distribute.Strategy): The distribution strategy.
+        optimizer (tf.keras.optimizers.Optimizer): The optimizer for training.
+        build_seq_len (int): Sequence length for building the dataset.
+                            NOTE: This is the maximum length required for padding.
+        path_to_read (str): Path to the training dataset.
+        path_to_val (str): Path to the validation dataset.
+        path_to_save (str): Path to save the best model weights and logs.
+        n_views (int): Number of augmented views per sample.
+                        Use n_views=3 (Triplet arch.) or n_views=2 (Siamese arch.).
+        global_batch_size (int): Total batch size across all replicas.
+        temperature (float): Temperature parameter for NT-Xent loss.
+        patience (int): Patience for early stopping.
+        epochs (int): Maximum number of training epochs.
+        initial_lr (float): Initial learning rate for the optimizer.
+        use_custom_schedule (bool): Whether to use a custom learning rate schedule.
+        warmup_steps (int): Number of warmup steps for custom learning rate schedule.
+        drop_rates (tuple): Drop rates for each view.
+        buffer_size (int): Buffer size for shuffling the dataset.
 
-    # --- Setup Paths and TensorBoard Writer ---
+        AUGMENTATION PARAMETERS:
+        -----------------------------------------------------------------------
+        apply_white_noise (tuple): Flags to apply white noise to each view.
+        noise_levels (tuple): Noise levels for each view, if apply_white_noise = TRUE.
+        apply_binning (tuple): Flags to apply binning to each view.
+        apply_outlier (tuple): Flags to apply outlier injection to each view.
+        maxlens (tuple): Maximum lengths for each view.
+        bin_widths (tuple): Bin widths for each view.
+
+        Returns:
+        -----------------------------------------------------------------------
+            epoch_wise_train_loss (list): List of average training losses per epoch.
+            epoch_wise_val_loss (list): List of average validation losses per epoch.
+        
+    """
+    # ===================================================================================================================
+    # ------------------------------------------- Setup Paths and TensorBoard Writer ------------------------------------
+    #
     best_weights_path = None
     summary_writer = None
-
+    #
     if path_to_save:
        #
        # Create TensorBoard writer
@@ -231,12 +297,12 @@ def contrastive_train(model,
     else:
         summary_writer = None 
     #
-    # --- End Setup Paths and TensorBoard Writer ---
-    # ================================================================================
+    # ------------------------------------------ End Setup Paths and TensorBoard Writer ----------------------------------
+    # ====================================================================================================================
     #
     # Create training data loader ONCE before the loop
     #
-    print("\n\nSetting up data loader for training...\n\n")
+    print("\n\nSetting up data loader for training...")
     if not path_to_read or not os.path.exists(path_to_read):
          print("\n\nWarning: Training Dataset path not provided or does not exist. Please provide training data.")
          return None
@@ -258,7 +324,7 @@ def contrastive_train(model,
                                                     buffer_size=buffer_size
                                                 )
             # ===============================================================================
-            # --- Distribute the datasets using the strategy ---
+            # ------------------ Distribute the datasets using the strategy -----------------
             #
             distributed_train_dataset = strategy.experimental_distribute_dataset(train_loader)
             # -------------------------------------------------------------------------------
@@ -267,12 +333,12 @@ def contrastive_train(model,
             print(f"\n\nError creating data loader: {e}")
             traceback.print_exc()
             return None # Return None if setup fails
-    # --- End Training Data Loader ---
-    # ================================================================================
+    # ---------------------------- End of Training Data Loader ------------------------------
+    # =======================================================================================
     #
     # Create validation data loader ONCE before the loop
     #
-    print("\n\nSetting up data loader for validation...\n\n")
+    print("\n\nSetting up data loader for validation...")
     valid_loader = None
     distributed_val_dataset = None
     if not path_to_val or not os.path.exists(path_to_val):
@@ -282,7 +348,7 @@ def contrastive_train(model,
             valid_loader = contrastive_data_loader(
                                                     source=path_to_val,
                                                     n_views=n_views, 
-                                                    seed=np.random.randint(1024), # Use different seed maybe?
+                                                    seed=np.random.randint(1024), 
                                                     batch_size=global_batch_size,
                                                     build_seq_len=build_seq_len,
                                                     apply_white_noise=apply_white_noise,
@@ -292,10 +358,10 @@ def contrastive_train(model,
                                                     maxlens=maxlens,
                                                     bin_widths=bin_widths,
                                                     drop_rates=drop_rates,
-                                                    buffer_size=max(buffer_size // 4, 10) # Smaller buffer for validation
+                                                    buffer_size=max(buffer_size // 4, 10) 
                                                 )
-            # -------------------------------------------------------------------------------
-            # --- Distribute the datasets using the strategy ---
+            # ===============================================================================
+            # ------------------- Distribute the datasets using the strategy ----------------
             #
             distributed_val_dataset = strategy.experimental_distribute_dataset(valid_loader)
             # -------------------------------------------------------------------------------
@@ -304,36 +370,38 @@ def contrastive_train(model,
             print(f"\n\nError creating validation loader: {e}")
             traceback.print_exc()
             valid_loader = None # Proceed without validation if loader fails
-    # --- End Validation Data Loader ---
-    # --- End of Data Loaders ---
+    # --------------------------- End of Validation Data Loader -----------------------------
     #
-    # ================================================================================
+    # ----------------------------------------- END OF DATA LOADERS ---------------------------------------------
+    #
+    # ===========================================================================================================
     # --- Training Loop ---
     # ===============================================================================
-    # ----- Variables --------
+    # --------------- All Variables ------------------
     es_count = 0
-    global_step_val = 0
-    global_step_train = 0 # Separate step counters
+    global_step_train = 0 
     best_val_loss = np.inf # Initialize best loss to infinity
     epoch_wise_val_loss = []
     epoch_wise_train_loss = []
     #
-    # ================================================================================
+    # =============================== START EPOCHS ===================================
     print(f"\n\nStarting training run for {epochs} epochs...\n\n")
     # ================================================================================
     for epoch in range(epochs):
-        # ------------------------- TRAINING EPOCH -------------------------
-        #step_wise_train_loss = []
+        # ---------------------------- TRAINING EPOCH --------------------------------
         total_train_loss = 0.0
         num_train_batches = 0
         model.trainable = True # Ensure model is trainable
-        # -------- setup the progress bar --------------------------------------------------------
+        #
+        # ------------------------------ setup the progress bar ---------------------------------------------
         pbar_train = tqdm(distributed_train_dataset, desc=f'Epoch {epoch + 1}/{epochs} (Train)', leave=False)
-        # ----------------------------------------------------------------------------------------
+        # ---------------------------------------------------------------------------------------------------
+        #
         for step, batch in enumerate(pbar_train):
             try:
                 # Call the distributed train step function to get the loss for this global batch
                 current_train_loss = distributed_train_step(model, optimizer, strategy, global_batch_size, batch, temperature)
+                # Calculate total loss and number of batches in this epoch
                 total_train_loss += current_train_loss
                 num_train_batches += 1
 
@@ -346,10 +414,8 @@ def contrastive_train(model,
                     with summary_writer.as_default(step=global_step_train):
                         tf.summary.scalar('loss/step_train', current_train_loss, description="Training loss per step")
                         tf.summary.scalar('learning_rate_step', current_lr, description="Learning rate per step")
-
+                #
                 global_step_train += 1       
-            
-
             except Exception as e:
                 print(f"\n\nError during train_step (Epoch {epoch+1}, Step {num_train_batches}): {e}")
                 continue # Skip this batch
@@ -360,33 +426,35 @@ def contrastive_train(model,
             print(f"Please check the data at 'path_to_read' and ensure it contains enough samples.")
             print("Aborting training run.")
             print("="*80 + "\n")
-            
             # Stop the training loop entirely
             break 
-        # ========================== END OF CHECK =======================================
-        # ----------------------------------------------------------------------
+        # ========================== END OF CHECK =========================================
+        # ---------------------------------------------------------------------------------
         # Calculate average training loss for the epoch
         # 
         mean_epoch_train_loss = total_train_loss / num_train_batches
         epoch_wise_train_loss.append(mean_epoch_train_loss.numpy())
-        print(f"Epoch {epoch + 1} - Average Training Loss: {mean_epoch_train_loss.numpy():.4f}")
-        # ------------------------------ End Training Epoch -----------------------
+        print(f"Epoch {epoch + 1} - Mean Training Loss (Distributed): {mean_epoch_train_loss.numpy():.4f}")
+        # ------------------------------ End of Training Epoch ----------------------------
         #
-        # -------------------------- VALIDATION EPOCH -----------------------------
-        #step_wise_val_loss = []
+        # ------------------------------- VALIDATION EPOCH --------------------------------
         mean_epoch_val_loss = np.inf # Default to infinity if no validation
-        if distributed_val_dataset: # Only run validation if loader exists
+        if distributed_val_dataset: # Only run validation if validation data exists
             #
             total_val_loss = 0.0
             num_val_batches = 0
             model.trainable = False # Set model to non-trainable for validation
+            # ------------------------------ setup the progress bar ---------------------------------------------
             pbar_val = tqdm(distributed_val_dataset, desc=f'Epoch {epoch + 1}/{epochs} (Val)', leave=False)
-        
+            # ---------------------------------------------------------------------------------------------------
             for step, batch in enumerate(pbar_val):
                 try:
+                    # Call the distributed validation step function to get the loss for this global batch
                     current_val_loss = distributed_validation_step(model, strategy, batch, temperature)
+                    # Calculate total loss and number of batches in this epoch
                     total_val_loss += current_val_loss
                     num_val_batches += 1
+                    # Update progress bar with the current step's validation loss 
                     pbar_val.set_postfix({'Val Loss': f'{current_val_loss.numpy():.4f}'})
                         
                 except Exception as e:
@@ -400,11 +468,11 @@ def contrastive_train(model,
                 # Set a default value and print a helpful warning.
                 mean_epoch_val_loss = np.inf # Use infinity so it won't be saved as the "best" model
                 print("\nWarning: The validation dataset was empty or smaller than the batch size. No validation metrics were calculated for this epoch.")
-            # mean_epoch_val_loss = total_val_loss / num_val_batches
-            # epoch_wise_val_loss.append(mean_epoch_val_loss.numpy())
+            #
             epoch_wise_val_loss.append(mean_epoch_val_loss.numpy() if hasattr(mean_epoch_val_loss, 'numpy') else mean_epoch_val_loss)
-
-        #------------------------------ End Validation Epoch -----------------------
+            print(f"Epoch {epoch + 1} - Mean Validation Loss (Distributed): {mean_epoch_val_loss.numpy():.4f}")
+        # ---------------------------------------------------------------------------------
+        #------------------------------ End of Validation Epoch ---------------------------
         #------------------------- END OF EPOCH SUMMARY & LOGGING -------------------------
         #  Print Epoch Summary
         # 
@@ -414,17 +482,18 @@ def contrastive_train(model,
         #
         current_lr = optimizer.learning_rate(optimizer.iterations).numpy() if hasattr(optimizer.learning_rate, '__call__') else optimizer.learning_rate.numpy()
         #
-        # Remove MLflow logging before packaging
+        # (IMPORTANT): Remove MLflow logging before packaging
         #
-        # ============  MLFLOW METRIC LOGGING ===
+        # ===============================  MLFLOW METRIC LOGGING ===========================
         #
         #
         # 
         mlflow.log_metric("loss/epoch_train", mean_epoch_train_loss, step=epoch)
         mlflow.log_metric("loss/epoch_val", mean_epoch_val_loss, step=epoch)
         mlflow.log_metric("learning_rate", current_lr, step=epoch)
-        # =============================
+        # ==================================================================================
         # Log epoch metrics to TensorBoard
+        #
         if summary_writer:
             with summary_writer.as_default(step=epoch):
                 tf.summary.scalar('loss/epoch_train', mean_epoch_train_loss)
@@ -435,15 +504,13 @@ def contrastive_train(model,
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
         #
-        # --- Checkpointing and Early Stopping based on Validation Loss ---
+        # ---------------------- Checkpointing and Early Stopping based on Validation Loss -----------------------
         #
         current_metric_for_saving = mean_epoch_val_loss if distributed_val_dataset else mean_epoch_train_loss # Use train loss if no validation
-        # Convert to a plain number before comparison and printing
         current_best_metric = current_metric_for_saving.numpy() if hasattr(current_metric_for_saving, 'numpy') else current_metric_for_saving
         #
-        # Early Stopping Check
+        # Apply Early Stopping Check ================================================================================
         #
-
         if current_best_metric < best_val_loss: # Compare with best_val_loss tracker
             status_prefix = f"Val loss" if distributed_val_dataset else f"Train loss"
             print(f"\n  --{status_prefix} improved from {best_val_loss:.5f} to {current_best_metric:.5f}.")
@@ -459,8 +526,8 @@ def contrastive_train(model,
                     print("\n\nWeights saved successfully.\n")
                 except Exception as e:
                     print(f"\n\nError saving weights: {e}\n")
-        else:
-            # Stop early stopping if validation isn't available or loss is inf/nan
+        else: # =====================================================================================================
+            # Stop early stopping if validation - didn't improve, not available (metric is training), or is inf/nan
             if distributed_val_dataset and np.isfinite(mean_epoch_val_loss):
                 es_count += 1
                 print(f"\n --Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
@@ -469,30 +536,32 @@ def contrastive_train(model,
                 print(f"\n --Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
             else:
                 print("\n --Loss is inf/nan or validation unavailable, skipping early stopping count.\n")
-
+        # ===========================================================================================================
+        # Check if early stopping criterion met and STOP training
+        #
         if es_count >= patience:
             print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
             break
-    
-    # --- End of Training Loop ---    
+    #
+    # ===================================================== END OF EPOCHS =======================================================
+    #    
     if summary_writer:
         summary_writer.close()
-    
     print("\n\nTraining finished.")
     #
     # Remove MLflow logging before packaging
-    ## ============================ MLFLOW MODEL LOGGING ====================
+    # =========================== MLFLOW MODEL LOGGING ===================================================
     #
     #
     if best_weights_path:
-        print(f"\n\nLogging the complete model to MLflow...\n\n")
+        print(f"\n\nLogging the complete model to MLflow...\n")
         mlflow.tensorflow.log_model(
             model=model,
             name="AstraNet(pre-trained)",
             registered_model_name="AstraNet(pre-trained)" 
         )
         print("\n\nComplete model logged.")
-    # =============================
+    # ====================================================================================================
     # Save the weights to the local directory
     #
     if best_weights_path and os.path.exists(best_weights_path):
