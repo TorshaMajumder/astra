@@ -21,7 +21,7 @@ n_views: 3            # Anchor, Canonical Positive, Hard Positive --- Triplet --
 temperature: 0.1      # Contrastive loss temperature
 patience: 100         # Early stopping patience
 epochs: 100           # Number of training epochs
-batch_size: 400       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
+batch_size: 128       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training.
 #
 # --- Augmentation Parameters (Anchor, Canonical Positive, Hard Positive) ---
@@ -42,7 +42,7 @@ drop_rates: [0.0, 0.0, 0.50]
 #
 # --- Transformer Model Parameters ---
 #
-num_layers: 4       # Number of encoder layers
+num_layers: 6       # Number of encoder layers
 mjd: True           # Use MJD for positional encoding
 base: 10000.0
 d_model: 256        # Embedding dimension
@@ -51,14 +51,14 @@ dff: 1024           # Feed-forward network dimension
 rate: 0.1           # Dropout rate
 use_band_info: True # Use segment embeddings
 use_drop: True      # Use dropout
-projection_dim: 128 # Projection head dimension 
+projection_dim: 256 # Projection head dimension 
 #
 # --- Optimizer and Scheduler ---
 #
 initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 #lr = 1e-4            # Use initial_lr in train function if not using schedule. 
 use_custom_schedule: True
-warmup_steps: 4000
+warmup_steps: 2000
 buffer_size: 21000    # Shuffle buffer size for CPU training, 50000 for GPU training.
 
                       
