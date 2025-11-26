@@ -1,9 +1,9 @@
+# =========================================================
+# Import all dependencies
+# =========================================================
 import os
-import random
 import logging
-import itertools
 import numpy as np
-from tqdm import tqdm
 import tensorflow as tf
 from astra.utils.helper import standardize
 from astra.bands.bands import ztf_band, ztf_mag
