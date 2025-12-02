@@ -30,6 +30,8 @@ Homepage = 'https://your-package-url.com' # Project URL
 [project.scripts]
 astra-data = "scripts.generate_data:main" # Entry point for astra-data
 astra-net = "scripts.train_model:main" # Entry point for astra-transformer
+astra-embeddings = "scripts.get_embeddings:main" # Entry for astra-embeddings
+astra-downstream = "scripts.downstream_task:main" # Entry for astra-downstream
 
 [project.optional-dependencies]
 gpu = [

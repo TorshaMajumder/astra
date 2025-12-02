@@ -37,6 +37,10 @@ astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/z
 ```
 astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --num_gpus 0 --epoch 100 --batch_size 300
 ```
+## Generate ASTRA embeddings for "Contrastive loss" framework
+```
+astra-embeddings --loss contrastive --config ../config/contrastive-loss_triplet.yaml --batch_size 500 --mlflow_upload True
+```
 ## For more help!
 ```
 astra-data --help

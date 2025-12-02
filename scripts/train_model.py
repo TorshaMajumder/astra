@@ -94,8 +94,8 @@ def contrastive_training(args):
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
-    mlflow.set_tracking_uri("http://127.0.0.1:5000")
-    mlflow.set_experiment("Set1")
+    mlflow.set_tracking_uri("http://127.0.0.1:37533")
+    mlflow.set_experiment("Set3")
     # ===============================================
     # Load the YAML configuration file
     #
@@ -103,10 +103,10 @@ def contrastive_training(args):
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Error: Configuration file not found at {args.config}")
+        print(f"\nError: Configuration file not found at {args.config}")
         return
     except Exception as e:
-        print(f"Error loading YAML file: {e}")
+        print(f"\nError loading YAML file: {e}")
         return
 
     # Override config with command-line arguments if they were provided
@@ -182,14 +182,14 @@ def contrastive_training(args):
     # Change the "run_name" to the format - {run_timestamp}_server_name"
     # --- Start MLflow Run ---
     #
-    with mlflow.start_run(run_name=f"{run_timestamp}_COIN") as run:
+    with mlflow.start_run(run_name=f"{run_timestamp}_SBER") as run:
         #
         # Add a tag for easier filtering (optional but good practice)
         mlflow.set_tag("model_type", "AstraNet")
         # ===============================================
         # Change the "run_name" to the format - {run_timestamp}_server_name"
         #
-        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
+        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_SBER\n\n")
         # ==================================================================
         # --- Use the strategy scope to create the model and optimizer ---
         # ==================================================================

@@ -5,8 +5,8 @@ import os
 import logging
 import numpy as np
 import tensorflow as tf
-from astra.utils.helper import standardize
 from astra.bands.bands import ztf_band, ztf_mag
+from astra.utils.helper import standardize, deserialize_for_inference
 # ===========================================================
 # SUPPRESS TF WARNINGS
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
@@ -15,6 +15,7 @@ os.system('clear')
 tf.random.set_seed(1024)
 np.random.seed(1024)
 # ===========================================================
+
 @tf.function
 def get_window(current_serie, mask_serie, max_len, num_cols):
   #
@@ -53,7 +54,7 @@ def get_window(current_serie, mask_serie, max_len, num_cols):
 
 
 @tf.function
-def sliding_window(sequence, build_seq_len, mask, last_index, bands_tensor, max_len):
+def sliding_window(sequence, mask, last_index, bands_tensor, max_len):
     """
     Extracts random windows of lightcurves from the sequence if the sequence
     length is larger than max_len, and padding sequence shorter than max_len with zeros.
@@ -61,16 +62,15 @@ def sliding_window(sequence, build_seq_len, mask, last_index, bands_tensor, max_
     Parameters:
     --------------------------------------------------------------------------------------------
       sequence: A tensor of shape [num_steps, num_features])
-      build_seq_len: The final, fixed length required for the entire sequence.
       mask: mask tensor
-      last_index: a tensor of the indices of the last index of each band in the sequence.
-      bands_tensor: the bands in the sequence.
-      max_len: The maximum length of each band sequence after sliding window.
+      last_index: a tensor of the indices of the last index of each band in the sequence
+      bands_tensor: the bands in the sequence
+      max_len: The maximum length of each band sequence after sliding window
 
     Returns:
     --------------------------------------------------------------------------------------------
-      final_series: An updated sequence with max_len.
-      final_mask: An updated mask tensor with corresponding masks.
+      final_series: An updated sequence with max_len
+      final_mask: An updated mask tensor with corresponding masks
     """
     #
     #
@@ -130,16 +130,16 @@ def binning(sequence, bin_width, drop_data):
 
   Parameters:
   ------------------------------------------------------------------------------
-    sequence: A TensorFlow tensor representing the input sequence.
-    bin_width: The width of the bins.
-    drop_data: The fraction of bins to drop.
+    sequence: A TensorFlow tensor representing the input sequence
+    bin_width: The width of the bins
+    drop_data: The fraction of bins to drop
 
   Returns:
   ------------------------------------------------------------------------------
     A tuple containing:
-      - The modified sequence with dropped bins.
-      - A mask indicating the dropped bins (1 for dropped/masked, 0 for kept/unmasked).
-        The masking convention is matched with the original Transformer paper.
+      - The modified sequence with dropped bins
+      - A mask indicating the dropped bins (1 for dropped/masked, 0 for kept/unmasked)
+        The masking convention is matched with the original Transformer paper
 
   '''
   #
@@ -188,14 +188,14 @@ def photometric_outlier(sequence, mask, mag_limit, mag_saturation):
 
   Parameters:
   ------------------------------------------------------------------------------
-      sequence: The input TensorFlow tensor.
-      mask: mask indicating the indices to be modified (where mask=1).
-      mag_limit: The upper limit for magnitude.
-      mag_saturation: The lower limit for magnitude.
+      sequence: The input TensorFlow tensor
+      mask: mask indicating the indices to be modified (where mask=1)
+      mag_limit: The upper limit for magnitude
+      mag_saturation: The lower limit for magnitude
 
   Returns:
   ------------------------------------------------------------------------------
-      The modified sequence with added outliers.
+      The modified sequence with added outliers
   """
   #
   # Get the indices where the mask is 0
@@ -236,12 +236,12 @@ def gaussian_noise(sequence, noise_level=0.1):
 
     Parameters:
     ----------------------------------------------------------------------------
-        sequence: A TensorFlow tensor representing the sequence/magnitude.
-        noise_level: The standard deviation of the Gaussian noise.
+        sequence: A TensorFlow tensor representing the sequence/magnitude
+        noise_level: The standard deviation of the Gaussian noise
 
     Returns:
     ----------------------------------------------------------------------------
-        A TensorFlow tensor representing the sequence with added noise.
+        A TensorFlow tensor representing the sequence with added noise
     """
     #
     # Get the length of the sequence and reshape it for correct broadcasting
@@ -313,13 +313,13 @@ def deserialize(sample):
 @tf.function
 def augmentation(data,
                  noise_level=0.1,
-                 build_seq_len=None,
                  apply_white_noise=False,
                  apply_binning=False,
                  apply_outlier=False,
-                 maxlen=400,
+                 maxlen=None,
                  bin_width=5,
                  drop_data=0.50,
+                 for_inference=False
                 ):
   '''
   Augments the input data with various photometric transformations.
@@ -331,13 +331,14 @@ def augmentation(data,
 
   Parameters:
   -------------------------------------------------------------------------------------------------------
-    data: Input data in tf.records format.
-    apply_white_noise (bool): Whether to apply Gaussian noise to the magnitude.
-    apply_binning (bool): Whether to apply binning and random dropping of bins.
-    apply_outlier (bool): Whether to introduce photometric outliers.
-    maxlen (int): The maximum length of each band sequence after sliding window.
-    bin_width (int): The width of the bins for binning.
-    drop_data (float): The fraction of bins to drop during binning. Provide value 0.0 < drop_data <=1 .
+    data: Input data in tf.records format
+    apply_white_noise (bool): Whether to apply Gaussian noise to the magnitude
+    apply_binning (bool): Whether to apply binning and random dropping of bins
+    apply_outlier (bool): Whether to introduce photometric outliers
+    maxlen (dict of int values): The maximum length of each band sequence after sliding window
+    bin_width (int): The width of the bins for binning
+    drop_data (float): The fraction of bins to drop during binning. Provide value 0.0 < drop_data <=1 
+    for_inference (bool): Deserialize data to include - id, label, last_index - for inference
     
   Returns:
   -------------------------------------------------------------------------------------------------------
@@ -349,6 +350,12 @@ def augmentation(data,
     #
     # Deserialize the data from tf.records
     #
+    if for_inference:
+       input_dict = deserialize_for_inference(data)
+       input_seq['id'] = input_dict['id']
+       input_seq['label'] = input_dict['label']
+       input_dict['last_index'] = input_dict['last_index']
+       
     input_dict = deserialize(data)
     mag = input_dict['input_id'][:,1]
     magerr = input_dict['input_id'][:,2]
@@ -379,7 +386,7 @@ def augmentation(data,
     #
     # Apply sliding_window for a fixed length sequence
     #
-    new_input, mask = sliding_window(new_input, build_seq_len, mask, input_dict['last_index'], input_dict['bands'], maxlen)
+    new_input, mask = sliding_window(new_input, mask, input_dict['last_index'], input_dict['bands'], maxlen)
     #
     #
     #
@@ -418,7 +425,8 @@ def contrastive_data_loader(source,
                             maxlens=None, 
                             bin_widths=(5, 5, 5), 
                             drop_rates=(0.0, 0.30, 0.60), 
-                            buffer_size=10000 
+                            buffer_size=10000,
+                            for_inference=False 
                            ):
     """
      Data loader with augmentation. This method build the input format for the model.
@@ -442,6 +450,7 @@ def contrastive_data_loader(source,
       drop_data (list of float): The fraction of bins to drop during binning
                                 NOTE: Provide value between 0 and 1
       buffer_size (int): Buffer size for shuffling
+      for_inference (bool): Deserialize data to include - id, label, last_index - for inference
 
      Returns:
      -----------------------------------------------------------------------------------
@@ -453,7 +462,7 @@ def contrastive_data_loader(source,
     #
     if not all(len(arg) == n_views for arg in [apply_white_noise, apply_binning, apply_outlier, maxlens, bin_widths, drop_rates]):
          raise ValueError(f"\n\nLength of all augmentation parameter lists/tuples must match n_views {n_views}.")
-
+    #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
     # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
     glob_pattern = os.path.join(source, '*', 'chunk_*.record')
@@ -485,12 +494,12 @@ def contrastive_data_loader(source,
         aug_fn = lambda data, idx=i: augmentation(data,
                                                    apply_white_noise=apply_white_noise[idx],
                                                    noise_level=noise_levels[idx],
-                                                   build_seq_len=build_seq_len,
                                                    apply_binning=apply_binning[idx],
                                                    apply_outlier=apply_outlier[idx],
                                                    maxlen=maxlens[idx],
                                                    bin_width=bin_widths[idx],
-                                                   drop_data=drop_rates[idx])
+                                                   drop_data=drop_rates[idx],
+                                                   for_inference=for_inference)
         view_loader = dataset.map(aug_fn, num_parallel_calls=AUTO)
         loaders.append(view_loader)
     # --------------------------------------------- Zipping and Batching ------------------------------------------
@@ -534,8 +543,8 @@ def contrastive_data_loader(source,
 
 def create_inference_loader(source,
                             batch_size,
-                            maxlen, # The fixed sequence length the encoder expects
-                            shuffle=False, # Shuffling is not needed for inference/evaluation
+                            maxlen, 
+                            shuffle=False, 
                             seed=np.random.seed(1024)):
     """
     Creates a tf.data.Dataset for inference/evaluation.
@@ -544,9 +553,11 @@ def create_inference_loader(source,
     fixed-length formatting), and yields batches of dictionaries containing
     both the model inputs and the associated metadata (IDs, labels).
 
-    Args:
-        source (str): Path to the directory containing TFRecord files.
-        batch_size (int): The batch size for inference.
+    Parameters:
+    --------------------------------------------------------------------------------
+        source (str): Path to the directory containing inference TFRecord files
+                      NOTE: source is of the format - /test/{class}/chunk_{n}_{m}.record
+        batch_size (int): The batch size for inference
         maxlen (int): The target fixed sequence length for the model input,
                       matching the anchor view length from pre-training.
         shuffle (bool): Whether to shuffle the dataset. Defaults to False.
@@ -555,76 +566,78 @@ def create_inference_loader(source,
     Returns:
         tf.data.Dataset: A dataset yielding batches of dictionaries.
     """
-
+    #
+    # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
+    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
     glob_pattern = os.path.join(source, '*', 'chunk_*.record')
-    print(f"Searching for inference files using pattern: {glob_pattern}")
+    print(f"\nSearching for inference files using pattern: {glob_pattern}...")
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
-
     num_files_found = tf.data.experimental.cardinality(filenames_dataset)
+    # ----------------------------------------- Check if files were found -----------------------------------------------------
     if num_files_found == 0:
-        raise ValueError(f"No TFRecord files found for inference matching pattern: {glob_pattern}")
+        raise ValueError(f"\nNo TFRecord files found for inference matching pattern: {glob_pattern}")
     elif num_files_found != tf.data.UNKNOWN_CARDINALITY:
-         print(f"Found {num_files_found} inference files.")
-
+         print(f"\nFound {num_files_found} inference files.")
+    # --------------------------------------------- End File Discovery and Check ----------------------------------------------
+    #
+    # Use interleave for better performance with multiple files
     dataset = filenames_dataset.interleave(
-        tf.data.TFRecordDataset,
-        cycle_length=AUTO,
-        num_parallel_calls=AUTO
-    )
+                                            tf.data.TFRecordDataset,
+                                            cycle_length=AUTO,
+                                            num_parallel_calls=AUTO
+                                        )
 
-    # --- Mapping Function for Inference ---
+    # --------------------- Mapping Function for Inference ----------------------
     def preprocess_for_inference(data):
-        input_dict = deserialize(data)
-        # input_dict = deserialize(data)
+        output_dict = {}
+        #
+        # Deserialize the data from tf.records
+        #
+        input_dict = deserialize_for_inference(data)
         mags = input_dict['input_id'][:,1]
         magerrs = input_dict['input_id'][:,2]
-        # Standardize Magnitude (same way as during training)
+        #
+        # Standardize the magnitude of the light curve 
+        #
         std_mags, _ = standardize(mags, magerrs)
-
-        # 2. Reconstruct features with the standardized magnitude
+        #
+        # Reconstruct features with the standardized magnitude
         #
         processed_features = tf.concat([
-                            input_dict['input_id'][:, 0:1], #mjd
-                            tf.reshape(std_mags, (-1,1)),
-                            input_dict['input_id'][:, 2:] #magerr and band_sorted
-                          ], axis=1)
-
+                                        input_dict['input_id'][:, 0:1], #mjd
+                                        tf.reshape(std_mags, (-1,1)),
+                                        input_dict['input_id'][:, 2:] #magerr and band_sorted
+                                      ], axis=1)
         # 
-        # Apply Padding/Cropping to the fixed `maxlen`.
-        # Create a zero mask for the original length.
+        # Apply Padding/Cropping to the fixed "maxlen"
+        # Create a zero mask for the original length
+        #
         initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
-        num_cols = tf.shape(processed_features)[1]
         # 
-        # Use get_window to enforce the fixed length
+        # Use sliding_window to enforce a fixed length sequence
+        #
         final_features, final_mask = sliding_window(
-            processed_features,
-            initial_mask,
-            input_dict['last_index'], 
-            input_dict['bands'], 
-            maxlen
-        )
-    
-        # 4. Prepare output dictionary with variable-length tensors
-        output_dict = {}
+                                                      processed_features,
+                                                      initial_mask,
+                                                      input_dict['last_index'], 
+                                                      input_dict['bands'], 
+                                                      maxlen
+                                                  )
+        
+        output_dict['id'] = input_dict['id']
+        output_dict['label'] = input_dict['label']
+        output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) 
         output_dict['input'] = tf.expand_dims(final_features[:, 1], axis=-1)
         output_dict['times'] = tf.expand_dims(final_features[:, 0], axis=-1)
         output_dict['band_info'] = tf.expand_dims(final_features[:, 3], axis=-1)
-        output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) 
-        output_dict['id'] = input_dict['id']
-        output_dict['label'] = input_dict['label']
-
+      
         return output_dict
     
 
     processed_dataset = dataset.map(preprocess_for_inference, num_parallel_calls=AUTO)
-
-    # Apply padded_batch
     final_loader = processed_dataset.batch(batch_size)
-
-    # Prefetch to overlap data loading with model execution
     final_loader = final_loader.prefetch(buffer_size=AUTO)
-
-    print("Inference data loader setup complete (using padded_batch for variable length).")
+    print(f"\nInference data loader setup complete (using fixed-sequence length of {sum(maxlen.values())})...")
     return final_loader
 
 

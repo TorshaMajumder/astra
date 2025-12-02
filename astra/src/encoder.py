@@ -162,6 +162,8 @@ class EncoderLayer(layers.Layer):
     def __init__(self, d_model, num_heads, dff, rate=0.1, use_res=True, **kwargs):
         super(EncoderLayer, self).__init__(**kwargs)
 
+        self.supports_masking = True
+
         self.mha = AstraMultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
@@ -207,14 +209,13 @@ class Encoder(layers.Layer):
     def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1, use_res=True, name="encoder", **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
 
+        self.supports_masking = True
 
         self.d_model = d_model
         self.num_layers = num_layers
 
-        # self.embedding = TimeSeriesEmbedding(d_model, base)
         self.enc_layers = [EncoderLayer(d_model=d_model, num_heads=num_heads, dff=dff, rate=rate, use_res=use_res) for _ in range(num_layers)]
 
-        # self.dropout = layers.Dropout(rate)
 
     def call(self, x, mask, training=True):
 

@@ -1,10 +1,10 @@
-# config.yaml
+# config file for training
 #
 # --- Data set Paths ---
 #
-path_to_read: "../dataset/cepheids/train/"
-path_to_val: "../dataset/cepheids/val/"
-path_to_save: "../lsdb_issues/"
+path_to_read: "/home/torsha/workplace/dataset/resampled_multi-class/train/"
+path_to_val: "/home/torsha/workplace/dataset/resampled_multi-class/val/"
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp3.4/"
 #
 # --- Architecture ---
 #
@@ -18,9 +18,9 @@ n_views: 3            # Anchor, Canonical Positive, Hard Positive --- Triplet --
 # So, set the batch_size accordingly.
 # e.g. batch_size = 128, num_gpus = 8, therefore, global_batch_size = 1024
 #
-temperature: 0.1      # Contrastive loss temperature
+temperature: 1.0      # Contrastive loss temperature
 patience: 100         # Early stopping patience
-epochs: 100           # Number of training epochs
+epochs: 50            # Number of training epochs
 batch_size: 128       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training.
 #
@@ -42,9 +42,9 @@ drop_rates: [0.0, 0.0, 0.50]
 #
 # --- Transformer Model Parameters ---
 #
-num_layers: 6       # Number of encoder layers
+num_layers: 4       # Number of encoder layers
 mjd: True           # Use MJD for positional encoding
-base: 10000.0
+base: 1000.0
 d_model: 256        # Embedding dimension
 num_heads: 4        # Number of attention heads
 dff: 1024           # Feed-forward network dimension

@@ -14,7 +14,7 @@ from tensorboard.backend.event_processing import event_accumulator
 
 
 @tf.function
-def deserialize(sample):
+def deserialize_for_inference(sample):
     '''
     Deserialize the tf.records into an input dict format.
     The columns of each lightcurve in ZTF is in the order: "mjd", "mag", "magerr", "band_sorted"
@@ -49,6 +49,7 @@ def deserialize(sample):
 
     input_dict['id']   = tf.cast(context['id'], tf.int64)
     input_dict['last_index'] = tf.sparse.to_dense(context['last_index'])
+    input_dict['last_index'] = tf.cast(input_dict['last_index'], tf.int32)
     input_dict['label']  = tf.cast(context['label'], tf.string)
     input_dict['bands']  = tf.sparse.to_dense(context['bands'])
 
@@ -113,7 +114,7 @@ def load_hparams_from_event_file(run_directory):
         tuple: A tuple containing (model_params, training_params, data_params)
                dictionaries, or (None, None, None) if the data is not found.
     """
-    print(f"Searching for hyperparameters in event file in: {run_directory}")
+    print(f"\nSearching for hyperparameters in event file in: {run_directory}")
     
     try:
         # Initialize EventAccumulator to load text summaries (Tensors)
@@ -162,7 +163,7 @@ def load_hparams_from_event_file(run_directory):
             print("ERROR: Parsed hyperparameters are missing 'model_params' or 'data_params' section.")
             return None, None, None
 
-        print("Hyperparameters loaded successfully from event file.")
+        print("\nHyperparameters loaded successfully from event file.")
         return model_params, training_params, data_params
 
     except FileNotFoundError:
@@ -200,7 +201,7 @@ def filter_by_class(source, target_counts, shuffle=True, seed=42):
     glob_pattern = os.path.join(source, 'partition_*', '*', 'chunk_*.record')
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
     base_dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    parsed_dataset = base_dataset.map(deserialize, num_parallel_calls=AUTO)
+    parsed_dataset = base_dataset.map(deserialize_for_inference, num_parallel_calls=AUTO)
     
     # Cache the parsed dataset for efficiency, as we will iterate over it multiple times.
     parsed_dataset = parsed_dataset.cache()
@@ -353,14 +354,14 @@ def process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, le
         if use_mlflow:
             # --- MLFLOW MODE ---
             run_timestamp = os.path.basename(run_directory)
-            with mlflow.start_run(run_name=f"{run_timestamp}_COIN") as run:
+            with mlflow.start_run(run_name=f"{run_timestamp}_SBER") as run:
                 #
                 # Add a tag for easier filtering (optional but good practice)
                 mlflow.set_tag("model_type", "AstraNet")
                 # ===============================================
                 # Change the "run_name" to the format - {run_timestamp}_server_name"
                 #
-                print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_COIN\n\n")
+                print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_SBER\n\n")
                 # Log Hyperparameters
                 mlflow.log_params({"run_timestamp":run_timestamp,
                                    "model_params":model_params, 
@@ -404,8 +405,8 @@ def backfill_mlflow_and_plot_loss(run_log_dir=None, train_loss_tag=None, val_los
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://localhost:5000")
-            mlflow.set_experiment("Test_Experiments")
+            mlflow.set_tracking_uri("http://localhost:37533")
+            mlflow.set_experiment("Set2")
             print("MLflow mode is ON. Will log to the configured server.")
         else:
             print("MLflow mode is OFF. Will save CSV and plots to local run directories.")
@@ -446,7 +447,7 @@ if __name__ == "__main__":
     # Example usage of plot_loss function
     #
     # run_log_dir = "/media3/majumder/contrastive_loss_res/"
-    run_log_dir = "/media3/majumder/contrastive_loss_res/run_20250825_214016/"
+    run_log_dir = "/home/torsha/workplace/contrastive_loss_res/exp2.4/run_20251126_125639/"
     # run_log_dir = "media3/majumder/contrastive_loss_res/run_20250822_215059/events.out.tfevents.1755892260.clrlsstsrv02.in2p3.fr.2826236.0.v2"
 
     backfill_mlflow_and_plot_loss(
