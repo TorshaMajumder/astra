@@ -1,0 +1,43 @@
+# config file for downstram task
+
+# --- General Task Configuration ---
+# Task can be 'classification' or 'anomaly_detection'
+task: classification
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/" # Where to save plots and reports
+
+# --- Mlflow Configuration -----
+mlflow_upload: True
+mlflow_name: "555b0ed231c34791bf8b78d7afe7b124"
+
+# --- Data Paths ---
+# Paths to the embeddings and labels from your pre-trained model
+path_to_data:
+  embeddings: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/embeddings.npy"
+  labels: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/labels.npy"
+
+# --- Classification Task Parameters ---
+classification_params:
+  # General settings for the classification task
+  test_size: 0.2
+  random_state: 42
+  # List of classifier models to run. Can be 'lr' (Logistic Regression) or 'rf' (Random Forest)
+  models:
+    - lr
+    - rf
+
+  # --- Hyperparameters for each model ---
+  # These are passed directly to the scikit-learn constructors
+  lr_params:
+    C: 0.1
+    max_iter: 1000
+    solver: 'lbfgs'
+
+  rf_params:
+    n_estimators: 150
+    max_depth: 20
+    n_jobs: -1 # Use all available CPU cores
+
+# --- Anomaly Detection Task Parameters (TODO) ---
+anomaly_detection_params:
+  model: 'isolation_forest'
+  contamination: 0.05

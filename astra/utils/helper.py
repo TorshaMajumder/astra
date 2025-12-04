@@ -3,6 +3,7 @@
 #
 import os
 import glob
+import yaml
 import json
 import mlflow
 import traceback
@@ -12,6 +13,23 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
 
+def load_config(args):
+    """Loads the YAML configuration file."""
+    print(f"\nLoading configuration from: {args.config}...")
+    with open(args.config, 'r') as f:
+        try:
+            config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"\nError parsing YAML file: {e}")
+    #
+    # Override config with command-line arguments if they were provided
+    # This loop checks if any command-line argument was given a value (is not None)
+    # and updates the config dictionary with it.
+    # ==============================================
+    for key, value in vars(args).items():
+        if value is not None and key != 'config':
+            config[key] = value
+    return config
 
 @tf.function
 def deserialize_for_inference(sample):
@@ -406,7 +424,7 @@ def backfill_mlflow_and_plot_loss(run_log_dir=None, train_loss_tag=None, val_los
             # Set an URI and Experiment name for MLflow
             #
             mlflow.set_tracking_uri("http://localhost:37533")
-            mlflow.set_experiment("Set2")
+            mlflow.set_experiment("Set3")
             print("MLflow mode is ON. Will log to the configured server.")
         else:
             print("MLflow mode is OFF. Will save CSV and plots to local run directories.")
@@ -447,7 +465,7 @@ if __name__ == "__main__":
     # Example usage of plot_loss function
     #
     # run_log_dir = "/media3/majumder/contrastive_loss_res/"
-    run_log_dir = "/home/torsha/workplace/contrastive_loss_res/exp2.4/run_20251126_125639/"
+    run_log_dir = "/home/torsha/workplace/contrastive_loss_res/exp3.1/run_20251130_211813/"
     # run_log_dir = "media3/majumder/contrastive_loss_res/run_20250822_215059/events.out.tfevents.1755892260.clrlsstsrv02.in2p3.fr.2826236.0.v2"
 
     backfill_mlflow_and_plot_loss(

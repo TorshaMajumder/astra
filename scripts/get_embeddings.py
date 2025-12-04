@@ -142,7 +142,7 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name):
         # Set an URI and Experiment name for MLflow
         #
         mlflow.set_tracking_uri("http://127.0.0.1:37533")
-        mlflow.set_experiment("Set1")
+        mlflow.set_experiment("Set3")
         # ===============================================
         with mlflow.start_run(run_id=f"{mlflow_name}") as run:
             # Log the Plotly figure to MLflow

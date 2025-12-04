@@ -2,9 +2,9 @@
 #
 # --- Data set Paths ---
 #
-path_to_load: "/home/torsha/workplace/contrastive_loss_res/exp1.1/run_20251126_125639/"
+path_to_load: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/"
 path_to_data: "/home/torsha/workplace/dataset/resampled_multi-class/test/"
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp1.1/run_20251126_125639/"
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/"
 #
 # --- Inferenec parameters ---
 #
@@ -12,4 +12,4 @@ batch_size: 500       # per-GPU Batch size (adjust based on GPU memory)/ Just a 
 num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
 max_len: {'g': 100, 'r': 175, 'i': 25} # Using ANCHOR view sequence length, i.e., build_seg_len
 mlflow_upload: False # Upload the UMAP embedding plot to MLflow?
-mlflow_name: "d058a3c08684430bb186c9ac894da6e3" # Set the name where you want to upload the plot
+mlflow_name: "555b0ed231c34791bf8b78d7afe7b124" # Set the name where you want to upload the plot
