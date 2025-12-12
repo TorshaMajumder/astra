@@ -3,6 +3,7 @@
 # =========================================================
 import os
 import umap
+import h5py
 import yaml
 import mlflow
 import psutil
@@ -13,6 +14,7 @@ import pandas as pd
 from tqdm import tqdm 
 import tensorflow as tf
 import plotly.express as px
+from astra.utils.helper import load_config
 from astra.src.transformer import AstraNet
 from astra.src.preprocessing import create_inference_loader
 from astra.utils.helper import load_hparams_from_event_file
@@ -34,7 +36,7 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)
 os.system('clear')
 # ===========================================================
 
-def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name):
+def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow_exp):
     #
     # ==================================== LOAD ASTRA embeddings, metadata ==================================
     #
@@ -53,28 +55,30 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name):
     # --- Load the Saved Embeddings and Metadata ---
     #
     print(f"\nLoading data from: {path_to_save}...")
-    ids_file = os.path.join(path_to_save, 'ids.npy') 
-    labels_file = os.path.join(path_to_save, 'labels.npy')
-    embeddings_file = os.path.join(path_to_save, 'embeddings.npy')
-    #
-    # Check if all the files exists
-    #
-    if not all(os.path.exists(f) for f in [embeddings_file, labels_file, ids_file]):
-        print(f"\nERROR: One or more .npy files (embeddings.npy, labels.npy, ids.npy) not found. \
-                Please check the 'run_directory' path.")
+    try:
+        with h5py.File(path_to_save, 'r') as hf:
+            embeddings = hf['embeddings'][:]
+            labels_raw = hf['labels'][:]
+            ids = hf['ids'][:]
+        labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
+        labels = np.char.decode(labels_as_bytes, encoding='utf-8')
+        print(f"\nSuccessfully loaded {len(embeddings)} embeddings and {len(ids)} ids...")
+    except FileNotFoundError:
+        print(f"\nError: HDF5 file not found at path - {path_to_save}")
+        return 
+    except KeyError as e:
+        print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
+        print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
         return
-    # --------------------------------------------------------------------------------------------
-    all_ids = np.load(ids_file)
-    all_labels = np.load(labels_file)
-    all_embeddings = np.load(embeddings_file)
+    # ------------------------------------------------------------------------------------------------
     #
     # Decode labels from byte strings to regular strings
     try:
-        labels_decoded = [label.decode('utf-8') for label in all_labels]
+        labels_decoded = [label.decode('utf-8') for label in labels]
     except (UnicodeDecodeError, AttributeError):
         print("\nLabels are not byte strings, using them as is.")
-        labels_decoded = all_labels
-    print(f"\nLoaded {len(all_embeddings)} embeddings with d_model={all_embeddings.shape[1]}")
+        labels_decoded = labels
+    print(f"\nLoaded {len(embeddings)} embeddings with d_model={embeddings.shape[1]}")
     print(f"\nFound {len(np.unique(labels_decoded))} unique labels.")
     #
     # ---------------------- Perform UMAP Dimensionality Reduction ----------------------------------
@@ -88,13 +92,13 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name):
                         metric=METRIC,
                         random_state=RANDOM_STATE
                     )
-    embedding_2d = reducer.fit_transform(all_embeddings)
+    embedding_2d = reducer.fit_transform(embeddings)
     print("\nUMAP reduction completed!")
     #
     # -------- Prepare Data for Plotting with Pandas and Seaborn -------
     # 
     df = pd.DataFrame()
-    df['id'] = all_ids
+    df['id'] = ids
     df['label'] = labels_decoded
     df['umap-x'] = embedding_2d[:, 0]
     df['umap-y'] = embedding_2d[:, 1]
@@ -142,12 +146,12 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name):
         # Set an URI and Experiment name for MLflow
         #
         mlflow.set_tracking_uri("http://127.0.0.1:37533")
-        mlflow.set_experiment("Set3")
+        mlflow.set_experiment(f"{mlflow_exp}")
         # ===============================================
         with mlflow.start_run(run_id=f"{mlflow_name}") as run:
             # Log the Plotly figure to MLflow
             print("\nLogging interactive figure to MLflow...")
-            mlflow.log_figure(fig, f"plots/umap_plot_{mlflow_name}.html")
+            mlflow.log_figure(fig, f"plots/umap_plot_{mlflow_name}_epoch_0.html")
             print("\nInteractive figure logged successfully to MLflow!")
         #
         #
@@ -192,23 +196,8 @@ def contrastive_embeddings(args):
     # ===============================================
     # Load the YAML configuration file
     #
-    try:
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"\nError: Configuration file not found at {args.config}")
-        return
-    except Exception as e:
-        print(f"\nError loading YAML file: {e}")
-        return
-    #
-    # Override config with command-line arguments if they were provided
-    # This loop checks if any command-line argument was given a value (is not None)
-    # and updates the config dictionary with it.
-    # ==============================================
-    for key, value in vars(args).items():
-        if value is not None and key != 'config':
-            config[key] = value
+    # --- Load Configuration ---
+    config = load_config(args)
     # ==============================================
     # ====================================================================================================
     # Load the hyper-parameters of the model from the path
@@ -326,52 +315,53 @@ def contrastive_embeddings(args):
 
     # ------------------------ Generate ASTRA Embeddings ------------------------------------
     print("\nGenerating embeddings for the dataset...\n")
+    # ----------------- Get embedding and attention weights dimension from the model -----------------
+    embedding_dim = encoder_model.output[0].shape[-1]
     #
-    # Declare variables
-    #
-    all_ids = []
-    all_labels = []
-    all_embeddings = []
-    #
-    # Iterate through the inference loader
-    #
-    for batch in tqdm(inference_loader, desc="Generating Embeddings"):
-        model_inputs = {
-            'input': batch['input'],
-            'times': batch['times'],
-            'band_info': batch['band_info'],
-            'mask': batch['mask']
-        }
-        batch_embeddings, batch_attention_weights = encoder_model(model_inputs, training=False)
-        
-        all_ids.append(batch['id'].numpy())
-        all_labels.append(batch['label'].numpy())
-        all_embeddings.append(batch_embeddings.numpy())
-    # --------------------------------------------------------------------------
-    # Concatenate results from all batches into single numpy arrays
-    #
-    all_ids = np.concatenate(all_ids, axis=0)
-    all_labels = np.concatenate(all_labels, axis=0)
-    all_embeddings = np.concatenate(all_embeddings, axis=0)
-    # Decode labels if they are byte strings
-    all_labels = np.array([label.decode('utf-8') for label in all_labels])
-    # ---------------------------------------------------------------------------
-    assert len(all_embeddings) == len(all_labels) == len(all_ids) 
-    print(f"\n --Successfully generated {len(all_embeddings)} embeddings!")
-    # ---------------------------------------------------------------------------
-    # ----------------------------- Save the results ----------------------------
-    #
-    print(f"\nSaving embeddings, metadata, and attention weights to: {run_directory}")
+    os.makedirs(config['path_to_save'], exist_ok=True)
+    h5_path = os.path.join(config['path_to_save'], 'embeddings.h5')
+    print(f"\nStreaming embeddings directly to HDF5 file: {h5_path} .")
+    # -------------- Create the HDF5 file and resizable datasets ---------------
     try:
-        np.save(os.path.join(run_directory, 'ids.npy'), all_ids)
-        np.save(os.path.join(run_directory, 'labels.npy'), all_labels)
-        np.save(os.path.join(run_directory, 'embeddings.npy'), all_embeddings)
-        print("\n --Files saved successfully!\n")
+        with h5py.File(h5_path, 'w') as hf:
+            # 
+            string_dtype = h5py.string_dtype(encoding='utf-8')
+            dset_ids = hf.create_dataset('ids', (0,), maxshape=(None,), dtype='int64')
+            dset_labels = hf.create_dataset('labels', (0,), maxshape=(None,), dtype=string_dtype)
+            dset_embeddings = hf.create_dataset('embeddings', (0, embedding_dim), maxshape=(None, embedding_dim), dtype='float32')
         
+            num_rows_written = 0
+            #
+            # Iterate through the inference loader
+            #
+            for batch in tqdm(inference_loader, desc="Generating Embeddings"):
+                model_inputs = {
+                                    'input': batch['input'],
+                                    'times': batch['times'],
+                                    'band_info': batch['band_info'],
+                                    'mask': batch['mask']
+                                }
+                batch_embeddings, _ = encoder_model(model_inputs, training=False)
+                batch_size = batch_embeddings.shape[0]
+                # Resize the datasets on disk to make space for the new batch
+                dset_embeddings.resize((num_rows_written + batch_size, embedding_dim))
+                dset_labels.resize((num_rows_written + batch_size,))
+                dset_ids.resize((num_rows_written + batch_size,))
+                # Write the new data into the newly created space
+                dset_embeddings[num_rows_written:] = batch_embeddings.numpy()
+                # dset_attention[num_rows_written:] = batch_attention_weights.numpy()
+                labels_as_bytes = batch['label'].numpy().astype(np.bytes_)
+                dset_labels[num_rows_written:] = labels_as_bytes
+                dset_ids[num_rows_written:] = batch['id'].numpy()
+                # Update the row counter
+                num_rows_written += batch_size
+
+        print(f"\n-- Generation Complete !")
+        print(f"\nSuccessfully wrote {num_rows_written} embeddings to {h5_path} .")
     except Exception as e:
         print(f"\nERROR: Could not save the files. Check: {e}\n")
     # -------------------------------------------------------------------------------------------------
-    generate_plot(config['path_to_save'], model_params, config['mlflow_upload'], config['mlflow_name'])
+    generate_plot(h5_path, model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     # -------------------------------------------------------------------------------------------------
     
 def clustered_embeddings():
@@ -399,8 +389,7 @@ def main():
     # ==========================================================
     parser.add_argument('--num_gpus', type=int, default=0, help='Number of GPUs to use for generating emebeddings. Default set to 0 for CPU mode.')
     parser.add_argument('--batch_size', type=int, default=500, help='Provide the batch size for the inference data.')
-    parser.add_argument('--mlflow_upload', type=bool, default=False, help='Provide TRUE if you want to upload the 2D-UMAP ' \
-                                                                            'ASTRA embeddings to MLflow else FALSE.')
+    
     args = parser.parse_args()
     # ==========================================================
     if args.loss == "contrastive":
@@ -412,6 +401,6 @@ def main():
     else:
         print("\nError: Unsupported loss function specified. Use 'contrastive' or 'clustering'.\n")
 
-
+    
 if __name__ == '__main__':
     main()

@@ -11,6 +11,7 @@ import logging
 import datetime 
 import argparse
 import tensorflow as tf
+from astra.utils.helper import load_config
 from astra.src.scheduler import CustomSchedule
 from astra.src.transformer import AstraNet, contrastive_train
 
@@ -89,38 +90,22 @@ def contrastive_training(args):
     global_batch_size = args.batch_size * strategy.num_replicas_in_sync
     print(f"\nGlobal batch size: {global_batch_size} (Per-replica: {args.batch_size} x {strategy.num_replicas_in_sync} replicas)\n")
     # ============================================================================================================================
+    # Load the YAML configuration file
+    #
+    config = load_config(args)
+    # ================ SKIP ==============================
+    # --- You now have your final configuration in the `config` dictionary ---
+    # print("--- Final Configuration ---")
+    # pprint.pprint(config)
+    # print("-------------------------")
+    # ===============================================
     # (IMPORTANT): Remove MLflow logging before packaging
     #
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
     mlflow.set_tracking_uri("http://127.0.0.1:37533")
-    mlflow.set_experiment("Set3")
-    # ===============================================
-    # Load the YAML configuration file
-    #
-    try:
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"\nError: Configuration file not found at {args.config}")
-        return
-    except Exception as e:
-        print(f"\nError loading YAML file: {e}")
-        return
-
-    # Override config with command-line arguments if they were provided
-    # This loop checks if any command-line argument was given a value (is not None)
-    # and updates the config dictionary with it.
-    # ==============================================
-    for key, value in vars(args).items():
-        if value is not None and key != 'config':
-            config[key] = value
-    # ================ SKIP ==============================
-    # --- You now have your final configuration in the `config` dictionary ---
-    # print("--- Final Configuration ---")
-    # pprint.pprint(config)
-    # print("-------------------------")
+    mlflow.set_experiment(config['mlflow_exp'])
     # ===============================================
     #
     #

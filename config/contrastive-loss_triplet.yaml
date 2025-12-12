@@ -2,9 +2,9 @@
 #
 # --- Data set Paths ---
 #
-path_to_read: "/home/torsha/workplace/dataset/resampled_multi-class/train/"
-path_to_val: "/home/torsha/workplace/dataset/resampled_multi-class/val/"
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp4.2/"
+path_to_read: "/home/torsha/workplace/dataset/res_multi_class_min_dect=100/train/"
+path_to_val: "/home/torsha/workplace/dataset/res_multi_class_min_dect=100/val/"
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp6.1/"
 #
 # --- Architecture ---
 #
@@ -19,8 +19,8 @@ n_views: 3            # Anchor, Canonical Positive, Hard Positive --- Triplet --
 # e.g. batch_size = 128, num_gpus = 8, therefore, global_batch_size = 1024
 #
 temperature: 0.1      # Contrastive loss temperature
-patience: 100         # Early stopping patience
-epochs: 50            # Number of training epochs
+patience: 15          # Early stopping patience
+epochs: 1            # Number of training epochs
 batch_size: 128       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training.
 #
@@ -34,9 +34,9 @@ apply_outlier: [False, False, True]
 # Sequence lengths for Anchor, Canonical Positive, Hard Positive
 #
 maxlens:
-  - {'g': 350, 'r': 300, 'i': 50}  # Anchor
-  - {'g': 175, 'r': 150, 'i': 25}  # Positive
-  - {'g': 350, 'r': 300, 'i': 50}  # Negative
+  - {'g': 100, 'r': 175, 'i': 25}  # Anchor
+  - {'g': 50, 'r': 88, 'i': 13}  # Positive
+  - {'g': 100, 'r': 175, 'i': 25}  # Negative
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
 #
@@ -58,7 +58,11 @@ projection_dim: 256 # Projection head dimension
 initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 #lr = 1e-4            # Use initial_lr in train function if not using schedule. 
 use_custom_schedule: True
-warmup_steps: 2000
+warmup_steps: 1000
 buffer_size: 21000    # Shuffle buffer size for CPU training, 50000 for GPU training.
+
+# --- Mlflow Configuration -----
+mlflow_upload: True
+mlflow_exp: "Set6"
 
                       

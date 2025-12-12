@@ -3,21 +3,22 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/" # Where to save plots and reports
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp5.7/run_20251210_170459/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
-mlflow_name: "555b0ed231c34791bf8b78d7afe7b124"
+mlflow_name: "b7d2687c4281492389162e9a012812f2"
+mlflow_exp: "Set5"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-path_to_data:
-  embeddings: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/embeddings.npy"
-  labels: "/home/torsha/workplace/contrastive_loss_res/exp3.4/run_20251202_211257/labels.npy"
+path_to_data: "/home/torsha/workplace/contrastive_loss_res/exp5.7/run_20251210_170459/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:
-  # General settings for the classification task
+  
+  bootstrap: True     # For bootstrapping results
+  n_iterations: 100   # For bootstrapping results
   test_size: 0.2
   random_state: 42
   # List of classifier models to run. Can be 'lr' (Logistic Regression) or 'rf' (Random Forest)
@@ -35,9 +36,17 @@ classification_params:
   rf_params:
     n_estimators: 150
     max_depth: 20
-    n_jobs: -1 # Use all available CPU cores
+    n_jobs: 10 # Use all available CPU cores
 
-# --- Anomaly Detection Task Parameters (TODO) ---
+# --- Anomaly Detection Task Parameters ---
 anomaly_detection_params:
-  model: 'isolation_forest'
-  contamination: 0.05
+  
+  inspect_samples: 10   # Number of anomalies to inspect
+  # List of models to run. Can be 'if' (Isolation Forest)
+  models: 
+    - 'if'
+  
+  # --- Hyperparameters for each model ---
+  if_params:
+    n_jobs: 10
+    random_seed: 42

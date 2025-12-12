@@ -4,6 +4,8 @@ import random
 import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
+from collections import defaultdict
+
 
 def write_dataset_to_chunks(dataset, output_dir, max_lcs_per_chunk=200):
     """
