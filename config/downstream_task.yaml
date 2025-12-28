@@ -3,16 +3,16 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp5.7/run_20251210_170459/" # Where to save plots and reports
+path_to_save: "/home/torsha/workplace/dataset/final_resampled_data_7/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
-mlflow_upload: True
-mlflow_name: "b7d2687c4281492389162e9a012812f2"
-mlflow_exp: "Set5"
+mlflow_upload: False
+mlflow_name: "89ec377d373b4f0fa2ac9c933235bdb9"
+mlflow_exp: "Set6"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-path_to_data: "/home/torsha/workplace/contrastive_loss_res/exp5.7/run_20251210_170459/embeddings.h5"
+path_to_data: "/home/torsha/workplace/dataset/final_resampled_data_7/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:

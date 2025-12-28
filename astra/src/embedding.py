@@ -45,8 +45,8 @@ class AstraEmbedding(layers.Layer):
             tf.keras.layers.Dense(32, activation='relu'),
             tf.keras.layers.Dense(d_model) # Project up to the model dimension
         ], name="segment_embedding")
-
       # self.seg_embedding = layers.Dense(d_model, name="segment_embedding")
+    
     self.pos_encoding = self.build_positional_encoding() 
     self.dropout = layers.Dropout(rate)
       

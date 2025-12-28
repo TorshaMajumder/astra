@@ -39,11 +39,11 @@ astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --
 ```
 ## Generate ASTRA embeddings for "Contrastive loss" framework
 ```
-astra-embeddings --loss contrastive --config ../config/contrastive-loss_embeddings.yaml --batch_size 500 --mlflow_upload True
+astra-embeddings --loss contrastive --config ../config/contrastive-loss_embeddings.yaml --batch_size 500
 ```
 ## Perform Downstream tasks for ASTRA framework
 ```
-astra-downstream --config ../config/downstream_task.yaml --mlflow_upload True
+astra-downstream --config ../config/downstream_task.yaml 
 ```
 ## For more help!
 ```

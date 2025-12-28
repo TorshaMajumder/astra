@@ -1,0 +1,33 @@
+# config file for finetuning
+#
+# --- Data set Paths ---
+#
+path_to_val: "/media3/majumder/dataset/lyrae_cep/val/"
+path_to_save: "/path/to/save/finetuned_models/"
+path_to_data: "/media3/majumder/dataset/lyrae_cep/train/"
+path_to_load: "/media3/majumder/contrastive_loss_res/run_20250826_222245/"
+#
+# --- Finetuning parameters ---
+#
+# IMPORTANT: This must match the dataset's classes
+label_map: {
+  'CEP': {
+          'count': 450,
+          'id': 0
+    },
+  'RRLY': {
+          'count': 1110,
+          'id': 1
+    }
+}
+max_len: {'g': 300, 'r': 300, 'i': 300}
+lr: 1e-5                # Use a very small learning rate
+batch_size: 32          # Adjust the batch_size for fine-tuning
+num_gpus: 0             # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
+epochs: 100             # Number of training epochs
+patience: 10            # Early stopping patience
+buffer_size: 10000      # Shuffle buffer size
+unfreeze_layers: 2      # unfreeze the last 2 encoderLayers
+mlflow_upload: True     # Upload the UMAP embedding plot to MLflow?
+mlflow_name: "89ec377d373b4f0fa2ac9c933235bdb9" # Set the name where you want to upload the plot
+mlflow_exp: "Set6"

@@ -2,9 +2,9 @@
 #
 # --- Data set Paths ---
 #
-path_to_read: "/home/torsha/workplace/dataset/res_multi_class_min_dect=100/train/"
-path_to_val: "/home/torsha/workplace/dataset/res_multi_class_min_dect=100/val/"
-path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp6.1/"
+path_to_read: "/home/torsha/workplace/dataset/final_resampled_data_4/train/"
+path_to_val: "/home/torsha/workplace/dataset/final_resampled_data_4/val/"
+path_to_save: "/home/torsha/workplace/contrastive_loss_res/exp6.2/"
 #
 # --- Architecture ---
 #
@@ -59,7 +59,7 @@ initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 #lr = 1e-4            # Use initial_lr in train function if not using schedule. 
 use_custom_schedule: True
 warmup_steps: 1000
-buffer_size: 21000    # Shuffle buffer size for CPU training, 50000 for GPU training.
+buffer_size: 22000    # Shuffle buffer size for CPU training, 50000 for GPU training.
 
 # --- Mlflow Configuration -----
 mlflow_upload: True

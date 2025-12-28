@@ -15,8 +15,9 @@ def diagnose_corrupted_files(source_dir, class_name=None):
     Returns:
         list: A list of paths to the corrupted files.
     """
-    print(f"\n--- Diagnosing files for class: {class_name} ---")
+    
     if class_name:
+        print(f"\n--- Diagnosing files for class: {class_name} ---")
         search_pattern = os.path.join(source_dir, '*', class_name, '*.record')
     else:
         search_pattern = os.path.join(source_dir, '*', '*', '*.record')
@@ -40,7 +41,7 @@ def diagnose_corrupted_files(source_dir, class_name=None):
             corrupted_files.append(filename)
     
     if not corrupted_files:
-        print(f"\nDiagnosis complete. No corrupted files found for class: '{class_name}'.")
+        print(f"\nDiagnosis complete. No corrupted files found.")
     else:
         print(f"\nDiagnosis complete. Found {len(corrupted_files)} corrupted file(s):")
         for f in corrupted_files:
@@ -132,7 +133,7 @@ if __name__ == '__main__':
 
     # --- HOW TO USE THIS ANALYSIS FUNCTION ---
     # Call this function before your resampling to get a report.
-    SOURCE_DATASET_DIR = '/home/torsha/workplace/dataset/testing/test/'
+    SOURCE_DATASET_DIR = '/home/torsha/workplace/dataset/all_dataset/test/'
     # --- STEP 1: Diagnose the problematic class first ---
     # We know from the error that 'DSCT|GDOR|SXPHE' has a bad file.
     # bad_files = diagnose_corrupted_files(SOURCE_DATASET_DIR, 'DSCT|GDOR|SXPHE')
@@ -150,3 +151,4 @@ if __name__ == '__main__':
         print("\nNo corruption found. Proceeding with duplicate analysis...")
         analysis_df = analyze_duplicates(SOURCE_DATASET_DIR)
         print(analysis_df)
+        analysis_df.to_excel("/home/torsha/workplace/dataset/all_dataset/out.csv", sep='\t')

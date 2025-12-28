@@ -16,6 +16,7 @@ from astra.src.embedding import AstraEmbedding
 from astra.src.preprocessing import contrastive_data_loader
 
 
+@tf.keras.utils.register_keras_serializable()
 class AstraNet(tf.keras.Model):
     def __init__(self, num_layers, d_model, num_heads, dff, 
                  base=10000.0, use_res=True, use_band_info=True, rate=0.1,
@@ -553,12 +554,18 @@ def contrastive_train(model,
     # =========================== MLFLOW MODEL LOGGING ===================================================
     #
     #
+    input_example = {
+        'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+        'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+        'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+        'mask': tf.zeros((1, build_seq_len), dtype=tf.float32).numpy()
+    }
     if best_weights_path:
         print(f"\n\nLogging the complete model to MLflow...\n")
         mlflow.tensorflow.log_model(
             model=model,
-            name="AstraNet(pre-trained)",
-            registered_model_name="AstraNet(pre-trained)" 
+            input_example=input_example,
+            name="AstraNet(pre-trained)" 
         )
         print("\n\nComplete model logged.")
     # ====================================================================================================

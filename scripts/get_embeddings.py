@@ -151,7 +151,7 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow
         with mlflow.start_run(run_id=f"{mlflow_name}") as run:
             # Log the Plotly figure to MLflow
             print("\nLogging interactive figure to MLflow...")
-            mlflow.log_figure(fig, f"plots/umap_plot_{mlflow_name}_epoch_0.html")
+            mlflow.log_figure(fig, f"plots/umap_plot_{mlflow_name}_epoch_7.html")
             print("\nInteractive figure logged successfully to MLflow!")
         #
         #
