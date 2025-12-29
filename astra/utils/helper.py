@@ -14,7 +14,9 @@ import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
 
 def load_config(args):
-    """Loads the YAML configuration file."""
+    """
+    Loads the YAML configuration file.
+    """
     print(f"\nLoading configuration from: {args.config}...")
     with open(args.config, 'r') as f:
         try:

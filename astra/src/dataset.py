@@ -15,7 +15,7 @@ from tensorflow.keras import backend as K
 from joblib import wrap_non_picklable_objects
 
 # ===========================================================
-# SUPPRESS TF WARNINGS
+# SUPPRESS WARNINGS
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
 # ===========================================================
