@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta" # Specifies the build backend
 [project]
 name = "astra" # Project name
 version = "1.0.0" 
-dynamic = ["dependencies"]
+# dynamic = ["dependencies"]
 
 
 authors = [
@@ -32,17 +32,18 @@ astra-data = "scripts.generate_data:main" # Entry point for astra-data
 astra-net = "scripts.train_model:main" # Entry point for astra-transformer
 astra-embeddings = "scripts.get_embeddings:main" # Entry for astra-embeddings
 astra-downstream = "scripts.downstream_task:main" # Entry for astra-downstream
+astra-finetuning = "scripts.apply_finetuning:main" # Entry for astra-downstream
 
-[project.optional-dependencies]
-gpu = [
-    "tensorflow[and-cuda]; sys_platform == 'linux'"
-]
+# [project.optional-dependencies]
+# gpu = [
+#    "tensorflow[and-cuda]; sys_platform == 'linux'"
+# ]
 
 [tool.setuptools]
 packages = ["astra", "scripts"] 
 
-[tool.setuptools.dynamic]
-dependencies = {file = "requirements.txt"} # Dynamic dependencies from requirements.txt
+# [tool.setuptools.dynamic]
+# dependencies = {file = "requirements.txt"} # Dynamic dependencies from requirements.txt
 
 
 
