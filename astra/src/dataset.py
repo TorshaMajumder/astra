@@ -14,9 +14,11 @@ from nested_pandas import NestedDtype
 from tensorflow.keras import backend as K 
 from joblib import wrap_non_picklable_objects
 
-
+# ===========================================================
+# SUPPRESS TF WARNINGS
 warnings.filterwarnings(action="ignore") 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
+# ===========================================================
 
 
 def get_record(id_, label, last_index, numpy_lc):
