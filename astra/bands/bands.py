@@ -1,3 +1,6 @@
+# =========================================================
+# Import all dependencies
+# =========================================================
 import numpy as np
 #
 # Define the ZTF bands in Angstroms (ZTF mean filter wavelengths)
