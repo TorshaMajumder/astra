@@ -10,7 +10,7 @@ dataset/
 data/
 
 # Config files
-config/
+# config/
 
 # Notebooks
 notebooks/overall_label_counts.csv
