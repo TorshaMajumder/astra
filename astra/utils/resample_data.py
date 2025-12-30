@@ -308,11 +308,11 @@ if __name__ == '__main__':
     #
     # Pass "mode" as "duplicate_analysis" or "resampling"
     #
-    mode = "resampling"
+    mode = "duplicate_analysis"
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/home/torsha/workplace/dataset/all_dataset/val/'
+    source_dir = '/home/nvidia/workplace/dataset/training_data/test/'
     target_dir = '/home/torsha/workplace/dataset/test/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
     max_lcs_per_chunk = 200   

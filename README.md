@@ -3,14 +3,17 @@
 ```
 >> git clone https://github.com/TorshaMajumder/astra.git
 >> cd astra
->> python3 -m venv venv
->> source venv/bin/activate
+```
+##### For data generation (in tf.records format) create a separate virt_env
+```
+>> python3.11 -m venv venv_data
+>> source venv_data/bin/activate
 ## Optional upgrade
 >> pip install --upgrade pip setuptools wheel pip-tools
-## For CPU users
 >> pip install -e .  
-## For GPU users
->> pip install -e .[gpu]   
+>> pip install -r data-requirements.txt  
+```
+```
 ## For MLflow logging install/re-install the two packages (Remove them before packaging from README)
 >> pip install mlflow
 >> pip install pyarrow==22.0.0
