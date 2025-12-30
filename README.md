@@ -11,7 +11,7 @@
 
 ```
 ## Creating Tensor Records
-##### For data generation (in tf.records format) create a separate virt_env
+#### For data generation (in tf.records format) create a separate "virt_env"
 ```
 >> python3.11 -m venv venv_data
 >> source venv_data/bin/activate
