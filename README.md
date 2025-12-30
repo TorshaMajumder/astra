@@ -52,4 +52,7 @@ astra-downstream --config ../config/downstream_task.yaml
 ```
 astra-data --help
 astra-net --help
+astra-embeddings --help
+astra-downstream --help
+astra-finetuning --help
 ```
