@@ -148,7 +148,7 @@ def analyze_duplicates(source_dir):
         # --------------------------------------------------------------------------
     print("\n--- Analysis Complete ---\n")
     res = pd.DataFrame(final_results)
-    res.to_csv(f"{os.path.join(os.path.dirname(source_dir), "data_stats.csv")}", sep="\t")
+    res.to_csv(os.path.join(os.path.dirname(source_dir), "data_stats.csv"), sep="\t")
     print(res)
     return res
 
