@@ -104,7 +104,7 @@ def contrastive_training(args):
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
-    mlflow.set_tracking_uri("http://127.0.0.1:37533")
+    mlflow.set_tracking_uri("http://localhost:8000")
     mlflow.set_experiment(config['mlflow_exp'])
     # ===============================================
     #
@@ -167,14 +167,14 @@ def contrastive_training(args):
     # Change the "run_name" to the format - {run_timestamp}_server_name"
     # --- Start MLflow Run ---
     #
-    with mlflow.start_run(run_name=f"{run_timestamp}_SBER") as run:
+    with mlflow.start_run(run_name=f"{run_timestamp}_nvidia") as run:
         #
         # Add a tag for easier filtering (optional but good practice)
         mlflow.set_tag("model_type", "AstraNet")
         # ===============================================
         # Change the "run_name" to the format - {run_timestamp}_server_name"
         #
-        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_SBER\n\n")
+        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_nvidia\n\n")
         # ==================================================================
         # --- Use the strategy scope to create the model and optimizer ---
         # ==================================================================

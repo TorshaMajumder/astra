@@ -37,6 +37,15 @@ astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/z
 astra-data --dest ../dataset/cepheids/ --path_to_buff ../dataset/cepheids/hats/zubercal_vcep --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200 --keep_label ACEP DCEP T2CEP
 ```
 ## Training ASTRA framework with "Contrastive loss"
+#### ASTRA-NET is based on distributed training, so create a separate "virt_env" that uses ```tensorflow==2.15.0 and tf-keras==2.15.0```
+```
+>> python3.11 -m venv venv_train
+>> source venv_train/bin/activate
+## Optional upgrade
+>> pip install --upgrade pip setuptools wheel pip-tools
+>> pip install -e .  
+>> pip install -r train-requirements.txt 
+```
 ```
 astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --num_gpus 0 --epoch 100 --batch_size 300
 ```

@@ -3,6 +3,7 @@
 .project
 .pydevproject
 .vscode
+.env
 astra/.DS_Store
 
 # Dataset
@@ -81,6 +82,7 @@ venv/
 ENV/
 *venv*/
 venv*/
+
 
 
 
