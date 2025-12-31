@@ -400,8 +400,6 @@ def contrastive_train(model,
         #
         for step, batch in enumerate(pbar_train):
             try:
-                if step >= 50:
-                    break
                 # Call the distributed train step function to get the loss for this global batch
                 current_train_loss = distributed_train_step(model, optimizer, strategy, global_batch_size, batch, temperature)
                 # Calculate total loss and number of batches in this epoch
