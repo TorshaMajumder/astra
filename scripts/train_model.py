@@ -274,6 +274,10 @@ def contrastive_training(args):
 
 def main():
     # ==========================================================
+    # Set up timer
+    # ==========================================================
+    start_time = time.time()
+    # ==========================================================
     # Set up the Argument Parser
     # ==========================================================
     parser = argparse.ArgumentParser(prog='astra-net',
@@ -297,9 +301,15 @@ def main():
 
     if args.loss == "contrastive":
         contrastive_training(args)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\n\n --- Total Execution Time: {elapsed_time / 60:.2f} minutes ({elapsed_time:.2f} seconds).\n")
     
     elif args.loss == "clustering":
         clustered_training(args)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"\n\n --- Total Execution Time: {elapsed_time / 60:.2f} minutes ({elapsed_time:.2f} seconds).\n")
     
     else:
         print("\nError: Unsupported loss function specified. Use 'contrastive' or 'clustering'.\n")
@@ -307,8 +317,7 @@ def main():
     
 
 if __name__ == '__main__':
-    start_time = time.perf_counter()
+    
     main()
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-    print(f"\n\n --- Total Execution Time: {elapsed_time / 60:.4f} minutes ({elapsed_time:.4f} seconds).\n")
+    
+    

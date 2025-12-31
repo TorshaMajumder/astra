@@ -93,9 +93,7 @@ setup.py
 requirements.in
 
 
-## Remove any other files
-astra/utils/test.py
-scripts/test.py
-scripts/ft.py
-scripts/train_transformer.py
+## Remove any log files
+epoch1_log.txt
+final_log.txt
 
