@@ -63,6 +63,6 @@ buffer_size: 100000   # Shuffle buffer size for CPU training, 100000 for GPU tra
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
-mlflow_exp: "Test"
+mlflow_exp: "ASTRA(Pre-training)"
 
                       
