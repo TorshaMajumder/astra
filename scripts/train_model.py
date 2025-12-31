@@ -3,6 +3,7 @@
 # =========================================================
 import os
 import json
+import time
 import yaml
 import psutil
 import mlflow
@@ -306,4 +307,8 @@ def main():
     
 
 if __name__ == '__main__':
+    start_time = time.perf_counter()
     main()
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"\n\n --- Total Execution Time: {elapsed_time / 60:.4f} minutes ({elapsed_time:.4f} seconds).\n")

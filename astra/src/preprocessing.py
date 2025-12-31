@@ -465,7 +465,7 @@ def contrastive_data_loader(source,
     #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
     glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    # glob_pattern = os.path.join(source, '*', 'chunk_*.record')
+    # glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
     print(f"\n\nSearching for TFRecord files using pattern: {glob_pattern}")
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
     # ----------------------------------------- Check if files were found -----------------------------------------------------
@@ -569,7 +569,7 @@ def create_inference_loader(source,
     #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
     glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    # glob_pattern = os.path.join(source, '*', 'chunk_*.record')
+    # glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
     print(f"\nSearching for inference files using pattern: {glob_pattern}...")
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
     num_files_found = tf.data.experimental.cardinality(filenames_dataset)
