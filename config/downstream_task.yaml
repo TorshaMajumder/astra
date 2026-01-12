@@ -3,28 +3,27 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/torsha/workplace/dataset/final_resampled_data_7/" # Where to save plots and reports
+path_to_save: "/home/nvidia/workplace/dataset/training_data/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
-mlflow_upload: False
-mlflow_name: "89ec377d373b4f0fa2ac9c933235bdb9"
-mlflow_exp: "Set6"
+mlflow_upload: True
+mlflow_name: "20251231_140014_nvidia"
+mlflow_exp: "ASTRA(Downstream Tasks)"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-path_to_data: "/home/torsha/workplace/dataset/final_resampled_data_7/embeddings.h5"
+path_to_data: "/home/nvidia/workplace/dataset/training_data/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:
   
-  bootstrap: True     # For bootstrapping results
+  bootstrap: False    # For bootstrapping results
   n_iterations: 100   # For bootstrapping results
   test_size: 0.2
   random_state: 42
   # List of classifier models to run. Can be 'lr' (Logistic Regression) or 'rf' (Random Forest)
   models:
-    - lr
-    - rf
+    - mlp
 
   # --- Hyperparameters for each model ---
   # These are passed directly to the scikit-learn constructors
@@ -34,9 +33,22 @@ classification_params:
     solver: 'lbfgs'
 
   rf_params:
-    n_estimators: 150
-    max_depth: 20
-    n_jobs: 10 # Use all available CPU cores
+    n_estimators: 250
+    max_depth: 40
+    n_jobs: -1 # Use all available CPU cores
+    min_samples_leaf: 10
+    max_features: 0.1
+  
+  mlp_params:
+    hidden_layers: [256, 128] # Two hidden layers with 256 and 128 neurons
+    dropout_rate: 0.3         # Dropout rate for regularization
+    learning_rate: 0.0001     # Learning rate for the Adam optimizer
+    epochs: 100               # Maximum number of epochs to train for
+    batch_size: 256           # Number of samples per training step
+    patience: 10             # Patience for EarlyStopping
+
+
+
 
 # --- Anomaly Detection Task Parameters ---
 anomaly_detection_params:

@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 from sklearn.utils import resample
 from collections import defaultdict
 from astra.utils.helper import load_config
-from sklearn.preprocessing import StandardScaler
-from coniferest.isoforest import IsolationForest
+from astra.src.classifier import mlp_classifier
+# from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 # ==========================================================
 os.system('clear')
@@ -163,11 +164,11 @@ def run_bootstrap_classification_task(embeddings, labels, config):
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://127.0.0.1:37533")
-            mlflow.set_experiment(f"{config["mlflow_exp"]}")
+            mlflow.set_tracking_uri("http://localhost:8000")
+            mlflow.set_experiment(f'{config["mlflow_exp"]}')
             print(f"\n{'='*20} Logging to MLflow {'='*20}")
             # ===============================================
-            with mlflow.start_run(run_id=f"{config["mlflow_name"]}") as run:
+            with mlflow.start_run(run_name=f"{config['mlflow_name']}") as run:
                 #
                 # Save the object ids and labels as txt file in artifacts/
                 #
@@ -198,13 +199,21 @@ def run_classification_task(embeddings, labels, config):
     # load the Classification parameters 
     #
     class_config = config['classification_params']
+    # 
+    # Encode string labels to integers
+    # 
+    print("\n--- Encoding string labels to integers...")
+    label_encoder = LabelEncoder()
+    label_encoded = label_encoder.fit_transform(labels)
+    print(f"---   Found {len(np.unique(label_encoded))} classes!")
+    # --------------------------------------------------------------------------------------------
     print("\n-------------------------- Running Supervised Classification Task ---------------------------")
     #
     # ------------------------ Split Data into Training and Testing Sets -------------------------
     #
     X_train, X_test, y_train, y_test = train_test_split(
                                                         embeddings, 
-                                                        labels, 
+                                                        label_encoded, 
                                                         test_size=class_config['test_size'], 
                                                         random_state=class_config['random_state'], 
                                                         stratify=labels  
@@ -230,34 +239,64 @@ def run_classification_task(embeddings, labels, config):
         if model_key == 'rf':
             print("\n-- Instantiating Random Forest classifier with params:", model_params)
             classifier = RandomForestClassifier(random_state=class_config['random_state'], **model_params)
+            #
+            # ------------------ Train Classifier ------------------
+            print("\nTraining classifier...")
+            classifier.fit(X_train_scaled, y_train)
+            #
+            print("\nEvaluating on the held-out test split...")
+            y_pred = classifier.predict(X_test_scaled)
+            # ------------------------------------------------------
         elif model_key == 'lr':
             print("\n-- Instantiating Logistic Regression classifier with params:", model_params)
             classifier = LogisticRegression(random_state=class_config['random_state'], **model_params)
+            #
+            # ------------------ Train Classifier ------------------
+            print("\nTraining classifier...")
+            classifier.fit(X_train_scaled, y_train)
+            #
+            print("\nEvaluating on the held-out test split...")
+            y_pred = classifier.predict(X_test_scaled)
+            # ------------------------------------------------------
+        elif model_key == 'mlp':
+            print("\n-- Instantiating MLP classifier with params:", model_params)
+            history, accuracy, y_pred = mlp_classifier(
+                                        X_train_scaled, 
+                                        y_train, 
+                                        X_test_scaled, 
+                                        y_test, 
+                                        input_dim=X_train_scaled.shape[1], 
+                                        num_classes=len(label_encoder.classes_), 
+                                        mlp_params=model_params
+                                    )
+            
         else:
             print(f"\nWarning: Classifier type '{model_key}' not recognized. Skipping...")
             continue
         #
-        # ------------------ Train and Evaluate ------------------
-        print("\nTraining classifier...")
-        classifier.fit(X_train_scaled, y_train)
-        #
-        print("\nEvaluating on the held-out test split...")
-        y_pred = classifier.predict(X_test_scaled)
+        # ------------------ Evaluate the classifier ------------------
         #
         accuracy = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred)
+        report = classification_report(y_test, y_pred, target_names=label_encoder.classes_)
         #
         print(f"\nTest Accuracy: {accuracy * 100:.2f}%")
         print("\nClassification Report:\n", report)
         # ---------- Confusion Matrix ------------
         cm = confusion_matrix(y_test, y_pred)
+        cm_perc = confusion_matrix(y_test, y_pred, normalize='true')
+        # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
+        labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm.flatten(), cm_perc.flatten())]
+        labels = np.asarray(labels).reshape(cm.shape)
         # ---------------- Plots -----------------
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=classifier.classes_, yticklabels=classifier.classes_)
-        ax.set_ylabel('True Labels', fontsize=12)
-        ax.set_xlabel('Predicted Labels', fontsize=12)
-        ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14)
+        fig, ax = plt.subplots(figsize=(12, 10))
+        sns.heatmap(cm_perc, annot=labels, fmt="", cmap='YlGnBu', 
+                    annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale'},
+                    xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+        plt.xticks(rotation=45, ha='right', fontsize=10)
+        plt.yticks(rotation=0, fontsize=10)
+        ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Predicted Labels', fontsize=12, fontweight='bold')
+        ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14, pad=20)
         # ------------------- Save the figure ----------------------
         output_filename = os.path.join(config["path_to_save"], f'confusion_matrix_{model_key}.png')
         plt.savefig(output_filename, dpi=300, bbox_inches='tight')
@@ -272,11 +311,11 @@ def run_classification_task(embeddings, labels, config):
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://127.0.0.1:37533")
-            mlflow.set_experiment(f"{config["mlflow_exp"]}")
+            mlflow.set_tracking_uri("http://localhost:8000")
+            mlflow.set_experiment(f'{config["mlflow_exp"]}')
             print(f"\n{'='*20} Logging to MLflow {'='*20}")
             # ===============================================
-            with mlflow.start_run(run_id=f"{config["mlflow_name"]}") as run:
+            with mlflow.start_run(run_name=f"{config['mlflow_name']}") as run:
                 # Log the confusion matrix, classification report, and accuracy score to MLflow
                 mlflow.log_metric(f"{model_key}.accuracy", accuracy)
                 print("\nLogged accuracy score...")
@@ -345,7 +384,7 @@ def run_anomaly_detection_task(embeddings, labels, ids, config):
                     object_labels, 
                     fmt='%s', 
                     )
-        print(f"\nSuccessfully saved {len(object_ids)} anomaly indices to: {config["path_to_save"]} .")
+        print(f'\nSuccessfully saved {len(object_ids)} anomaly indices to: {config["path_to_save"]} .')
         #
         #------------------------------------------------------------------------------------------------
         if config["mlflow_upload"]:
@@ -355,11 +394,11 @@ def run_anomaly_detection_task(embeddings, labels, ids, config):
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://127.0.0.1:37533")
-            mlflow.set_experiment(f"{config["mlflow_exp"]}")
+            mlflow.set_tracking_uri("http://localhost:8000")
+            mlflow.set_experiment(f'{config["mlflow_exp"]}')
             print(f"\n{'='*20} Logging to MLflow {'='*20}")
             # ===============================================
-            with mlflow.start_run(run_id=f"{config["mlflow_name"]}") as run:
+            with mlflow.start_run(run_name=f"{config['mlflow_name']}") as run:
                 #
                 # Save the object ids and labels as txt file in artifacts/
                 #

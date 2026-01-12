@@ -14,6 +14,7 @@ import pandas as pd
 from tqdm import tqdm 
 import tensorflow as tf
 import plotly.express as px
+import plotly.graph_objects as go
 from astra.utils.helper import load_config
 from astra.src.transformer import AstraNet
 from astra.src.preprocessing import create_inference_loader
@@ -36,7 +37,7 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)
 os.system('clear')
 # ===========================================================
 
-def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow_exp):
+def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload, mlflow_name, mlflow_exp):
     #
     # ==================================== LOAD ASTRA embeddings, metadata ==================================
     #
@@ -47,10 +48,17 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow
     METRIC = 'cosine'               
     RANDOM_STATE = 42    
     #
-    # Plotting parameters
+    # --------------- Load the class counts from the CSV and sort them -----------------
+    # the larger classes are at the TOP of the CSV so they are plotted FIRST (background)
     #
-    POINT_SIZE = 6
-    ALPHA = 0.6  
+    counts_df = pd.read_csv(path_to_class_count, header=0, sep='\t', index_col=False) 
+    counts_df = counts_df.sort_values('total_records', ascending=False)
+    #
+    # Create a mapping for easy lookup
+    #
+    class_to_count = dict(zip(counts_df['class_name'], counts_df['total_records']))
+    sorted_class_names = counts_df['class_name'].tolist()
+    #
     # 
     # --- Load the Saved Embeddings and Metadata ---
     #
@@ -95,44 +103,74 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow
     embedding_2d = reducer.fit_transform(embeddings)
     print("\nUMAP reduction completed!")
     #
-    # -------- Prepare Data for Plotting with Pandas and Seaborn -------
+    # -------- Prepare Data for Plotting with Pandas and Plotly -------
     # 
     df = pd.DataFrame()
     df['id'] = ids
     df['label'] = labels_decoded
     df['umap-x'] = embedding_2d[:, 0]
     df['umap-y'] = embedding_2d[:, 1]
-    #
-    # --- Create and Save the Plot ---
-    #
+    df['total_records'] = df['label'].map(class_to_count)
+    df = df.sort_values('total_records', ascending=False)
+    # 
+    # Define Unique Colors for all the classes
+    # 
+    palette = px.colors.qualitative.Alphabet[:len(sorted_class_names)]
+    color_map = {name: palette[i] for i, name in enumerate(sorted_class_names)}
+    # -------------------------------------------------------------------------
+    # Create Figure using Scattergl 
+    # -------------------------------------------------------------------------
     print("\nGenerating plot...")
-    # -----------------------------------------------------------------------------------------------------
-    fig = px.scatter(
-                        df,
-                        x="umap-x", 
-                        y="umap-y",
-                        color="label",
-                        hover_data=['label', 'id'],         
-                        title=f"2D-UMAP Projection of ASTRA Embeddings (d_model={model_params["d_model"]})"
-                    )
+    fig = go.Figure()
+    for name in sorted_class_names:
+        cls_data = df[df['label'] == name]
+        count = class_to_count[name]
+        # ---------- Applying conditioning for opacity and marker size based on class count -----
+        if count > 200000:
+            opacity = 0.15
+            marker_size = 1.5
+        elif count > 50000:
+            opacity = 0.3
+            marker_size = 2.5
+        elif count > 20000:
+            opacity = 0.4
+            marker_size = 3.5
+        elif count > 5000:
+            opacity = 0.65
+            marker_size = 4.5
+        else:
+            opacity = 0.80
+            marker_size = 6.0
+        # ------------------------------------------------------------------------------------------
+        # ------------------------------- Create and Save the Plot ---------------------------------
+        # ------------------------------------------------------------------------------------------
+        fig.add_trace(go.Scattergl(
+                                    x=cls_data['umap-x'],
+                                    y=cls_data['umap-y'],
+                                    mode='markers',
+                                    name=f"{name} (n={count})",
+                                    marker=dict(
+                                                color=color_map[name],
+                                                size=marker_size,
+                                                opacity=opacity
+                                            ),
+                                    text=cls_data['id'],
+                                    hoverinfo='text+name'
+                                ))
+    # --------------------------------- Update Layout -------------------------------------------
+    # -------------------------------------------------------------------------------------------
     fig.update_layout(
+                        title=f'2D-UMAP Projection of ASTRA Embeddings (d_model={model_params["d_model"]})',
                         xaxis_title='UMAP Dimension 1',
                         yaxis_title='UMAP Dimension 2',
-                        legend_title_text='Classes',
+                        legend_title_text='Classes with counts',
+                        template='plotly_white',
                         font=dict(size=14),
                         title_font_size=18,
-                        legend=dict(
-                                        x=1.05, 
-                                        y=1,
-                                        xanchor='left',
-                                        yanchor='top'
-                                    )
-                    )
-    fig.update_traces(
-                        marker=dict(
-                                        size=POINT_SIZE,  
-                                        opacity=ALPHA     
-                                    )
+                        legend=dict(itemsizing='constant', font=dict(size=10)),
+                        width=1200,
+                        height=900
+
                     )
     fig.update_xaxes(showgrid=False, zeroline=False, showticklabels=False, showline=False)
     fig.update_yaxes(showgrid=False, zeroline=False, showticklabels=False, showline=False)
@@ -145,13 +183,15 @@ def generate_plot(path_to_save, model_params, mlflow_upload, mlflow_name, mlflow
         # Initialize MLflow Tracking
         # Set an URI and Experiment name for MLflow
         #
-        mlflow.set_tracking_uri("http://127.0.0.1:37533")
+        mlflow.set_tracking_uri("http://localhost:8000")
         mlflow.set_experiment(f"{mlflow_exp}")
         # ===============================================
-        with mlflow.start_run(run_id=f"{mlflow_name}") as run:
+        with mlflow.start_run(run_name=f"{mlflow_name}") as run:
             # Log the Plotly figure to MLflow
+            output_path = f"umap_plot_{mlflow_name}.html"
             print("\nLogging interactive figure to MLflow...")
-            mlflow.log_figure(fig, f"plots/umap_plot_{mlflow_name}_epoch_7.html")
+            fig.write_html(output_path, include_plotlyjs='cdn')
+            mlflow.log_artifact(output_path, artifact_path="plots")
             print("\nInteractive figure logged successfully to MLflow!")
         #
         #
@@ -361,7 +401,7 @@ def contrastive_embeddings(args):
     except Exception as e:
         print(f"\nERROR: Could not save the files. Check: {e}\n")
     # -------------------------------------------------------------------------------------------------
-    generate_plot(h5_path, model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
+    generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     # -------------------------------------------------------------------------------------------------
     
 def clustered_embeddings():
