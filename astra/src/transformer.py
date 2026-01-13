@@ -19,7 +19,7 @@ from astra.src.preprocessing import contrastive_data_loader
 @tf.keras.utils.register_keras_serializable()
 class AstraNet(tf.keras.Model):
     def __init__(self, num_layers, d_model, num_heads, dff, 
-                 base=10000.0, use_res=True, use_band_info=True, rate=0.1,
+                 base=10000.0, time_scaling=100, use_res=True, use_band_info=True, rate=0.1,
                  use_drop=False, mjd=True, projection_dim=None, name="astra_net", **kwargs):
         super(AstraNet, self).__init__(name=name, **kwargs)
 
@@ -32,6 +32,7 @@ class AstraNet(tf.keras.Model):
         self.use_drop=use_drop
         self.num_heads=num_heads
         self.num_layers=num_layers
+        self.time_scaling=time_scaling
         self.use_band_info=use_band_info
         self.projection_dim=projection_dim
         #
@@ -39,7 +40,7 @@ class AstraNet(tf.keras.Model):
         #
         self.embedding_layer = AstraEmbedding(
                                                 d_model=d_model, base=base, rate=rate, 
-                                                use_band_info=use_band_info, use_drop=use_drop, mjd=mjd
+                                                use_band_info=use_band_info, use_drop=use_drop, mjd=mjd, time_scaling=time_scaling
                                             )
         #
         # Instantiate Encoder Layer
@@ -122,6 +123,7 @@ class AstraNet(tf.keras.Model):
                         "use_drop": self.use_drop,
                         "num_heads": self.num_heads,
                         "num_layers": self.num_layers,
+                        "time_scaling": self.time_scaling
                         "use_band_info": self.use_band_info,
                         "projection_dim": self.projection_dim,
                     })

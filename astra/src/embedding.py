@@ -29,13 +29,14 @@ class AstraEmbedding(layers.Layer):
   -----------------------------------------------------------------------------------------------------------------
       tf.Tensor: Embedded time series data.
   """
-  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, name="astra_embedding", mjd=True):
+  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, name="astra_embedding", mjd=True, time_scaling=100):
     super(AstraEmbedding, self).__init__()
 
     self.mjd = mjd
     self.base = base
     self.d_model = d_model
     self.use_drop = use_drop
+    self.time_scaling = time_scaling
     self.use_band_info = use_band_info
     # Embed magnitude feature (linear)
     self.seq_embedding = layers.Dense(d_model, name="sequence_embedding") 
@@ -72,7 +73,7 @@ class AstraEmbedding(layers.Layer):
       with tf.name_scope("positional_encoding") as scope:
 
         if self.mjd:
-            indices = times
+            indices = tf.cast(self.time_scaling, dtype=times.dtype)*times
         else:
             #
             # If MJD is False then the timestep will be np.arange(0, times.shape[1]/seq_len)
@@ -80,7 +81,7 @@ class AstraEmbedding(layers.Layer):
             indices = tf.tile(tf.expand_dims(tf.range(tf.shape(times)[1], dtype=times.dtype), 0), [tf.shape(times)[0], 1])
             indices = tf.expand_dims(indices, 2)
 
-        angle_rates = tf.exp((2.0*(tf.range(self.d_model, dtype=times.dtype)//2)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
+        angle_rates = tf.exp((tf.range(self.d_model, dtype=times.dtype)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
         angle_rates = angle_rates[tf.newaxis, tf.newaxis, :]
         angle_rads = indices * angle_rates
         #

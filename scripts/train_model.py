@@ -132,7 +132,7 @@ def contrastive_training(args):
                 "n_views": config['n_views'], 
                 "num_layers": config['num_layers'], "d_model": config['d_model'], "num_heads": config['num_heads'],
                 "dff": config['dff'], "projection_dim": config['projection_dim'], "rate": config['rate'], "mjd": config['mjd'],
-                "use_band_info": config['use_band_info'], "base": config['base'], "use_drop": config['use_drop']
+                "use_band_info": config['use_band_info'], "base": config['base'], "use_drop": config['use_drop'], "time_scaling": config['time_scaling']
             },
             "training_params": {
                 "epochs": config['epochs'], "patience": config['patience'], "initial_lr": config['initial_lr'],
@@ -193,6 +193,7 @@ def contrastive_training(args):
                 mjd=hparams["model_params"]["mjd"],
                 use_drop=hparams["model_params"]["use_drop"],
                 use_band_info=hparams["model_params"]["use_band_info"],
+                time_scaling = hparams["model_params"]["time_scaling"],
                 projection_dim=hparams["model_params"]["projection_dim"] 
             )
             # ===============================================
