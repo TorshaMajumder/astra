@@ -123,7 +123,7 @@ class AstraNet(tf.keras.Model):
                         "use_drop": self.use_drop,
                         "num_heads": self.num_heads,
                         "num_layers": self.num_layers,
-                        "time_scaling": self.time_scaling
+                        "time_scaling": self.time_scaling,
                         "use_band_info": self.use_band_info,
                         "projection_dim": self.projection_dim,
                     })
@@ -402,6 +402,8 @@ def contrastive_train(model,
         #
         for step, batch in enumerate(pbar_train):
             try:
+                if step >= 50:
+                    break
                 # Call the distributed train step function to get the loss for this global batch
                 current_train_loss = distributed_train_step(model, optimizer, strategy, global_batch_size, batch, temperature)
                 # Calculate total loss and number of batches in this epoch

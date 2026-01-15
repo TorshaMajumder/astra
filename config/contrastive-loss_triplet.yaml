@@ -42,7 +42,7 @@ drop_rates: [0.0, 0.0, 0.50]
 #
 # --- Transformer Model Parameters ---
 #
-num_layers: 4          # Number of encoder layers
+num_layers: 5          # Number of encoder layers
 mjd: True              # Use MJD for positional encoding
 base: 14400000         # Base for positional encoding
 d_model: 512           # Embedding dimension
