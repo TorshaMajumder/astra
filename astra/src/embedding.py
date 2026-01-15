@@ -24,6 +24,7 @@ class AstraEmbedding(layers.Layer):
       use_band_info (bool): Whether to use band information and add segment encoding. Defaults to True.
       use_drop (bool): Whether to apply dropout. Defaults to False.
       mjd (bool): Whether to use Modified Julian Date (MJD) for positional encoding. Defaults to True.
+      time_scaling (float): Scaling factor for time values when mjd is True. Defaults to 100.
 
   Returns:
   -----------------------------------------------------------------------------------------------------------------

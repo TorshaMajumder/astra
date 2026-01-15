@@ -20,7 +20,7 @@ n_views: 3            # Anchor, Canonical Positive, Hard Positive --- Triplet --
 #
 temperature: 0.1      # Contrastive loss temperature
 patience: 20          # Early stopping patience
-epochs: 600           # Number of training epochs
+epochs: 250           # Number of training epochs
 batch_size: 78        # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 8           # # of GPU instances to use for training. Set to 0 for CPU training.
 #
