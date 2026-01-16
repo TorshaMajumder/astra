@@ -282,16 +282,30 @@ def run_classification_task(embeddings, labels, config):
         print(f"\nTest Accuracy: {accuracy * 100:.2f}%")
         print("\nClassification Report:\n", report)
         # ---------- Confusion Matrix ------------
+        #
+        # Define the order of classes for better visualization
+        #
+        class_order = ["AGN", "YSO", "SOLAR_LIKE", "S", "CV", "LPV", "DSCT|GDOR|SXPHE", "RR", "CEP", "ECL", "ELL", "RS"]
+        #
+        # Get the reordered indices based on the original label encoder classes
+        #
+        original_class_order = list(label_encoder.classes_)
+        reorder_indices = [original_class_order.index(co) for co in class_order]
+        #
+        # Compute and reorder the confusion matrix
+        #
         cm = confusion_matrix(y_test, y_pred)
         cm_perc = confusion_matrix(y_test, y_pred, normalize='true')
+        cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
+        cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
         # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
-        labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm.flatten(), cm_perc.flatten())]
-        labels = np.asarray(labels).reshape(cm.shape)
+        labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
+        labels = np.asarray(labels).reshape(cm_reordered.shape)
         # ---------------- Plots -----------------
         fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(cm_perc, annot=labels, fmt="", cmap='YlGnBu', 
+        sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', 
                     annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale'},
-                    xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+                    xticklabels=class_order, yticklabels=class_order)
         plt.xticks(rotation=45, ha='right', fontsize=10)
         plt.yticks(rotation=0, fontsize=10)
         ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
@@ -311,7 +325,7 @@ def run_classification_task(embeddings, labels, config):
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://localhost:8000")
+            mlflow.set_tracking_uri("http://localhost:5000")
             mlflow.set_experiment(f'{config["mlflow_exp"]}')
             print(f"\n{'='*20} Logging to MLflow {'='*20}")
             # ===============================================
