@@ -4,6 +4,7 @@
 import os
 import glob
 import random
+import numpy as np
 import pandas as pd
 import tensorflow as tf
 from collections import defaultdict
@@ -56,7 +57,7 @@ def diagnose_corrupted_files(source_dir, class_name=None):
         print(f"\n--- Diagnosing files for class: {class_name} ---")
         search_pattern = os.path.join(source_dir, '*', class_name, '*.record')
     else:
-        search_pattern = os.path.join(source_dir, '*', '*', '*.record')
+        search_pattern = os.path.join(source_dir, '*', '*.record')
     # -------------------------------------------------------------------------
     filenames = glob.glob(search_pattern)
     # -------------------------------------------------------------------------
@@ -108,7 +109,7 @@ def analyze_duplicates(source_dir):
     # Adjust the search pattern. 
     # Default is - source_dir + "/partition_0/CEP/chunk_0_0.record"
     #
-    search_pattern = os.path.join(source_dir, '*', '*')
+    search_pattern = os.path.join(source_dir, '*')
     class_dirs = [d for d in glob.glob(search_pattern) if os.path.isdir(d)]
     print(f"\nFound {len(class_dirs)} tf.record files to process...\n")
     if not class_dirs:
@@ -187,7 +188,8 @@ def resample_and_split_dataset(source_dir,
                                target_dir, 
                                sampling_config, 
                                split_ratios=(0.8, 0.2), 
-                               max_lcs_per_chunk=200):
+                               max_lcs_per_chunk=200,
+                               oversample=False):
     """
     Resamples a TFRecord dataset based on a configuration, re-splits it, and saves it.
 
@@ -201,6 +203,9 @@ def resample_and_split_dataset(source_dir,
                                 test dataset will contain all the samples.
         max_lcs_per_chunk (int): Number of light curves per output TFRecord file.
         shuffle_buffer_size (int): Size of the shuffle buffer for tf.data.Dataset.
+        oversample (bool): If True, classes with fewer samples than the target will be
+                           oversampled (sampling with replacement) to meet the target.
+                           If False, the number of available samples will be used as a cap.
     """
     
     print("\n---------- Starting Resampling Process -----------")
@@ -229,17 +234,36 @@ def resample_and_split_dataset(source_dir,
         num_unique_available = len(unique_records)
         print(f"\n  Found {num_unique_available} unique records for {class_name}.\n")
         # ----------------------- Handle cases with insufficient data ----------------------
-        if num_unique_available < 3: continue
-           
-        elif num_unique_available < target_samples:
-            print(f"\n  WARNING: Requested {target_samples} samples, but only {num_unique_available} unique samples are available.")
-            print(f"\n  Using all {num_unique_available} available unique samples.")
-            samples_to_take = num_unique_available
-        else:
-            samples_to_take = target_samples   
+        if num_unique_available < 3:
+            print("\n WARNING: Less than 3 unique samples are available. Skipping...\n")
+            continue 
+
+        # This variable will hold the final list of samples (either under- or over-sampled)
+        final_sampled_list = []
         # ------------------------------- Shuffle and Sample -------------------------------
-        random.shuffle(unique_records)
-        final_sampled_list = unique_records[:samples_to_take]
+        if num_unique_available < target_samples:
+            # This is the new conditional logic block
+            if oversample:
+                print(f"\n  WARNING: Oversampling is ENABLED. Resampling with replacement to get {target_samples} samples.")
+                final_sampled_list.extend(unique_records)
+                num_to_add = target_samples - num_unique_available
+                if num_to_add > 0:
+                    additional_samples = random.choices(unique_records, k=num_to_add)
+                    final_sampled_list.extend(additional_samples)
+                random.shuffle(final_sampled_list)
+                samples_to_take = target_samples
+            else:
+                print(f"\n  WARNING: Oversampling is DISABLED. Requested {target_samples} samples, but only {num_unique_available} unique samples are available.")
+                final_sampled_list = unique_records
+                samples_to_take = num_unique_available
+
+        else:
+            # If we have enough data, we sample without replacement (i.e., shuffle and take)
+            print(f"\n  Sufficient data available. Randomly selecting {target_samples} samples.") 
+            random.shuffle(unique_records)
+            final_sampled_list = unique_records[:target_samples]
+            samples_to_take = target_samples
+        # ----------------------------------------------------------------------------------
         # --------------------------- Create the final, clean dataset ----------------------
         final_dataset = tf.data.Dataset.from_tensor_slices(final_sampled_list)
         # ------------------ Data splitting and writing as tf.records file -----------------
@@ -276,7 +300,7 @@ def resample_and_split_dataset(source_dir,
     # =====================================================================================
 
 
-def main(mode=None, source_dir=None, target_dir=None, split_ratios=None, max_lcs_per_chunk=None, config=None):
+def main(mode=None, source_dir=None, target_dir=None, split_ratios=None, max_lcs_per_chunk=None, config=None, oversample=False):
     try:
         if mode not in ["duplicate_analysis", "resampling"]:
             raise ValueError(f"\nValueError: Please provide mode as 'duplicate_analysis', 'resampling'. Got mode = {mode}.\n")
@@ -296,7 +320,8 @@ def main(mode=None, source_dir=None, target_dir=None, split_ratios=None, max_lcs
                                         target_dir=target_dir,
                                         sampling_config=config,
                                         split_ratios=split_ratios,
-                                        max_lcs_per_chunk=max_lcs_per_chunk
+                                        max_lcs_per_chunk=max_lcs_per_chunk,
+                                        oversample=oversample
                                     )
     except Exception as e:
         print(f"\n{e}")
@@ -312,23 +337,24 @@ if __name__ == '__main__':
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/media3/majumder/dataset/resampled_data_12K/test/'
-    target_dir = '/media3/majumder/dataset/resampled_data_12K/'
+    source_dir = '/media3/majumder/dataset/resampled_data_120K/test/'
+    target_dir = '/media3/majumder/dataset/resampled_data_120K/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
     max_lcs_per_chunk = 300   
+    oversample = True  # Set to True to enable oversampling when needed
     config = {
-                "AGN": 1000,
-                "CEP": 1000,
-                "DSCT|GDOR|SXPHE": 1000,
-                "RR": 1000,
-                "ECL": 1000,
-                "ELL": 1000,
-                "LPV": 1000,
-                "RS": 1000,
-                "CV": 1000,
-                "S": 1000,
-                "SOLAR_LIKE": 1000,
-                "YSO": 1000
+                "AGN": 10000,
+                "CEP": 10000,
+                "DSCT|GDOR|SXPHE": 10000,
+                "RR": 10000,
+                "ECL": 10000,
+                "ELL": 10000,
+                "LPV": 10000,
+                "RS": 10000,
+                "CV": 10000,
+                "S": 10000,
+                "SOLAR_LIKE": 10000,
+                "YSO": 10000
             }
-    main(mode, source_dir, target_dir, split_ratios, max_lcs_per_chunk, config)
+    main(mode, source_dir, target_dir, split_ratios, max_lcs_per_chunk, config, oversample)
     
