@@ -312,20 +312,23 @@ if __name__ == '__main__':
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/home/nvidia/workplace/dataset/training_data/val/'
-    target_dir = '/home/torsha/workplace/dataset/test/'
+    source_dir = '/media3/majumder/dataset/resampled_data_12K/test/'
+    target_dir = '/media3/majumder/dataset/resampled_data_12K/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
-    max_lcs_per_chunk = 200   
+    max_lcs_per_chunk = 300   
     config = {
-                'BCEP': 500,
-                'CEP': 5000,
-                'DSCT|GDOR|SXPHE': 11000,
-                'RR': 13000,
-                'ACYG': 5,
-                'RCB': 15,
-                'SDB': 10,
-                'SPB': 2,
-                'SYST': 10
+                "AGN": 1000,
+                "CEP": 1000,
+                "DSCT|GDOR|SXPHE": 1000,
+                "RR": 1000,
+                "ECL": 1000,
+                "ELL": 1000,
+                "LPV": 1000,
+                "RS": 1000,
+                "CV": 1000,
+                "S": 1000,
+                "SOLAR_LIKE": 1000,
+                "YSO": 1000
             }
     main(mode, source_dir, target_dir, split_ratios, max_lcs_per_chunk, config)
     
