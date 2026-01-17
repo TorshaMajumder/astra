@@ -22,6 +22,75 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 os.system('clear')
 # ===========================================================
 
+def sample_embeddings(embeddings, labels, ids, sampling_config, random_state=None):
+    """
+    Performs custom over/under-sampling on the dataset based on a configuration dictionary.
+
+    Parameters:
+    ---------------------------------------------------------------------------------------
+        embeddings (np.ndarray): The full embeddings array
+        labels (np.ndarray): The full array of string labels
+        ids (np.ndarray): The full array of IDs
+        sampling_config (dict): A dictionary mapping class names to desired sample counts
+        random_state (int, optional): Seed for the random number generator for reproducibility
+
+    Returns:
+    ---------------------------------------------------------------------------------------
+        tuple: A tuple containing the new (sampled_embeddings, sampled_labels, sampled_ids).
+    """
+    if random_state is not None:
+        np.random.seed(random_state)
+
+    print("\n--- Starting custom sampling based on configuration...")
+    final_indices = []
+    # -------------------------------- Get class counts --------------------------------
+    # Get unique classes and their counts from the original dataset
+    #
+    unique_classes, class_counts = np.unique(labels, return_counts=True)
+    original_counts_dict = dict(zip(unique_classes, class_counts))
+
+    for class_name, desired_count in sampling_config.items():
+        # Check if the class exists in the dataset
+        if class_name not in original_counts_dict:
+            print(f"\n---   Warning: Class '{class_name}' not found in the dataset. Skipping...")
+            continue
+
+        actual_count = original_counts_dict[class_name]
+        # Get all indices for the current class
+        class_indices = np.where(labels == class_name)[0]
+        #
+        if actual_count > desired_count:
+            # --- Undersampling Case ---
+            print(f"\n---   Class '{class_name}': Found {actual_count}, Target {desired_count}. Undersampling...")
+            sampled_indices = np.random.choice(class_indices, size=desired_count, replace=False)
+        
+        elif actual_count < desired_count:
+            # --- Oversampling Case ---
+            print(f"\n---   Class '{class_name}': Found {actual_count}, Target {desired_count}. Oversampling...")
+            # 
+            all_existing_indices = class_indices
+            num_to_oversample = desired_count - actual_count
+            oversampled_indices = np.random.choice(class_indices, size=num_to_oversample, replace=True)
+            sampled_indices = np.concatenate([all_existing_indices, oversampled_indices])
+        
+        else: 
+            # --- Exact Match Case ---
+            print(f"\n---   Class '{class_name}': Found {actual_count}, Target {desired_count}. Taking all samples...")
+            sampled_indices = class_indices
+
+        final_indices.extend(sampled_indices)
+    # -------------------------------- Sampling summary --------------------------------------------------------
+    print(f"\n---   Total samples after sampling: {len(final_indices)}")
+    
+    # Shuffle the final list of indices to mix the classes together
+    np.random.shuffle(final_indices)
+    # Use the final embeddings after sampling
+    sampled_embeddings = embeddings[final_indices]
+    sampled_labels = labels[final_indices]
+    sampled_ids = ids[final_indices]
+
+    return sampled_embeddings, sampled_labels, sampled_ids
+
 def save_bootstrap_results(results, output_filepath, classifier_type, n_iterations):
     """
     Formats and saves the aggregated bootstrap results to a text file.
@@ -63,7 +132,7 @@ def save_bootstrap_results(results, output_filepath, classifier_type, n_iteratio
     print(f"\nBootstrap results successfully saved to: {output_filepath}\n")
 
 
-def run_bootstrap_classification_task(embeddings, labels, config):
+def run_bootstrap_classification_task(embeddings, labels, ids, config):
     """
     Splits data, then trains and evaluates all classifiers specified in the config
     on ASTRA embeddings using BOOTSTRAPPING.
@@ -180,7 +249,7 @@ def run_bootstrap_classification_task(embeddings, labels, config):
 
 
 
-def run_classification_task(embeddings, labels, config):
+def run_classification_task(embeddings, labels, ids, config):
     """
     Splits data, then trains and evaluates all classifiers specified in the config
     on ASTRA embeddings.
@@ -196,15 +265,29 @@ def run_classification_task(embeddings, labels, config):
         Save the confusion matrix in "path_to_save" folder
     """
     #
-    # load the Classification parameters 
+    # load the Classification parameters and sampling config if exits
     #
-    class_config = config['classification_params']
+    class_config = config.get('classification_params', {}) 
+    sampling_config = config.get('sampling', None) 
+    # ============================ Sampling data =================================
+    if sampling_config is not None:
+        sampled_embeddings, sampled_labels, _ = sample_embeddings(
+                                                                    embeddings, 
+                                                                    labels, 
+                                                                    ids, 
+                                                                    sampling_config,
+                                                                    random_state=class_config.get('random_state') 
+                                                                )
+    else:
+        print("\n--- No sampling configuration found. Using all data...")
+        sampled_embeddings, sampled_labels = embeddings, labels
+    # =============================================================================
     # 
     # Encode string labels to integers
     # 
     print("\n--- Encoding string labels to integers...")
     label_encoder = LabelEncoder()
-    label_encoded = label_encoder.fit_transform(labels)
+    label_encoded = label_encoder.fit_transform(sampled_labels)
     print(f"---   Found {len(np.unique(label_encoded))} classes!")
     # --------------------------------------------------------------------------------------------
     print("\n-------------------------- Running Supervised Classification Task ---------------------------")
@@ -212,11 +295,11 @@ def run_classification_task(embeddings, labels, config):
     # ------------------------ Split Data into Training and Testing Sets -------------------------
     #
     X_train, X_test, y_train, y_test = train_test_split(
-                                                        embeddings, 
+                                                        sampled_embeddings, 
                                                         label_encoded, 
                                                         test_size=class_config['test_size'], 
                                                         random_state=class_config['random_state'], 
-                                                        stratify=labels  
+                                                        stratify=label_encoded  
                                                     )
     print(f"\nSplitting data into {len(X_train)} training and {len(X_test)} testing samples.")
     #
@@ -325,7 +408,7 @@ def run_classification_task(embeddings, labels, config):
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://localhost:5000")
+            mlflow.set_tracking_uri("http://localhost:8000")
             mlflow.set_experiment(f'{config["mlflow_exp"]}')
             print(f"\n{'='*20} Logging to MLflow {'='*20}")
             # ===============================================
@@ -467,9 +550,9 @@ def main():
     
     if task_type == 'classification':
         if config["classification_params"].get('bootstrap'):
-            run_bootstrap_classification_task(embeddings, labels, config)
+            run_bootstrap_classification_task(embeddings, labels, ids, config)
         else:
-            run_classification_task(embeddings, labels, config)
+            run_classification_task(embeddings, labels, ids, config)
     elif task_type == 'anomaly_detection':
         run_anomaly_detection_task(embeddings, labels, ids, config)
     else:

@@ -4,12 +4,12 @@
 #
 path_to_load: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/"
 path_to_data: "/home/nvidia/workplace/dataset/training_data/test/"
-path_to_save: "/home/nvidia/workplace/dataset/training_data/"
+path_to_save: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/"
 path_to_class_count: "/home/nvidia/workplace/dataset/training_data/test/data_stats.csv"
 #
 # --- Inference parameters ---
 #
-batch_size: 1000      # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
+batch_size: 100       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 0           # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
 max_len: {'g': 300, 'r': 350, 'i': 50} # Using ANCHOR view sequence length, i.e., build_seg_len
 mlflow_upload: True   # Upload the UMAP embedding plot to MLflow?

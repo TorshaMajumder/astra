@@ -3,16 +3,33 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/nvidia/workplace/dataset/training_data/" # Where to save plots and reports
+path_to_save: "/home/nvidia/workplace/contrastive_loss_res/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
-mlflow_upload: True
+mlflow_upload: False
 mlflow_name: "20251231_140014_nvidia"
 mlflow_exp: "ASTRA(Downstream Tasks)"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-path_to_data: "/home/nvidia/workplace/dataset/training_data/embeddings.h5"
+path_to_data: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/embeddings.h5"
+
+# --- Data Sampling Configuration ---
+# For no sampling, set to "None"
+sampling: {
+            "AGN": 1000,
+            "CEP": 1000,
+            "DSCT|GDOR|SXPHE": 1000,
+            "RR": 1000,
+            "ECL": 1000,
+            "ELL": 1000,
+            "LPV": 1000,
+            "RS": 1000,
+            "CV": 1000,
+            "S": 1000,
+            "SOLAR_LIKE": 1000,
+            "YSO": 1000
+        }
 
 # --- Classification Task Parameters ---
 classification_params:
@@ -23,7 +40,8 @@ classification_params:
   random_state: 42
   # List of classifier models to run. Can be 'lr' (Logistic Regression) or 'rf' (Random Forest)
   models:
-    - mlp
+    - lr
+    - rf
 
   # --- Hyperparameters for each model ---
   # These are passed directly to the scikit-learn constructors
@@ -33,9 +51,9 @@ classification_params:
     solver: 'lbfgs'
 
   rf_params:
-    n_estimators: 250
-    max_depth: 40
-    n_jobs: -1 # Use all available CPU cores
+    n_estimators: 100
+    max_depth: 25
+    n_jobs: 20 # Use all available CPU cores
     min_samples_leaf: 10
     max_features: 0.1
   
