@@ -215,24 +215,6 @@ def write_records(frame, dest, max_lcs_per_chunk, bands, min_detec, n_partition)
         max_lcs_per_chunk (int): # of lcs to be stored in a chunk
 
     """
-    # collection = [frame.iloc[i:i+max_lcs_per_chunk] \
-    #               for i in range(0, frame.shape[0], max_lcs_per_chunk)]
-
-    # for counter, subframe in enumerate(collection):
-    #     # Open one TFRecord file for the entire chunk
-    #     record_path = os.path.join(dest, f"chunk_{n_partition}_{counter}.record")
-    #     with tf.io.TFRecordWriter(record_path) as writer:
-            
-    #         # Process each row sequentially and write it immediately
-    #         for id_, row in subframe.iterrows():
-    #             # Call process_lc directly for a single row
-    #             processed_data = process_lc(id_, row, bands, min_detec)
-                
-    #             # If the row was processed successfully, write it to the record
-    #             if processed_data is not None:
-    #                 create_record(*processed_data, writer)
-    #
-    # 
     #
     collection = [frame.iloc[i:i+max_lcs_per_chunk] \
                   for i in range(0, frame.shape[0], max_lcs_per_chunk)]

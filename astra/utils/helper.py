@@ -374,14 +374,14 @@ def process_event_file(run_log_dir, train_loss_tag, val_loss_tag, hparam_tag, le
         if use_mlflow:
             # --- MLFLOW MODE ---
             run_timestamp = os.path.basename(run_directory)
-            with mlflow.start_run(run_name=f"{run_timestamp}_SBER") as run:
+            with mlflow.start_run(run_name=f"{run_timestamp}_nvidia") as run:
                 #
                 # Add a tag for easier filtering (optional but good practice)
                 mlflow.set_tag("model_type", "AstraNet")
                 # ===============================================
                 # Change the "run_name" to the format - {run_timestamp}_server_name"
                 #
-                print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_SBER\n\n")
+                print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_nvidia\n\n")
                 # Log Hyperparameters
                 mlflow.log_params({"run_timestamp":run_timestamp,
                                    "model_params":model_params, 
@@ -425,8 +425,8 @@ def backfill_mlflow_and_plot_loss(run_log_dir=None, train_loss_tag=None, val_los
             # Initialize MLflow Tracking
             # Set an URI and Experiment name for MLflow
             #
-            mlflow.set_tracking_uri("http://localhost:37533")
-            mlflow.set_experiment("Set5")
+            mlflow.set_tracking_uri("http://localhost:8000")
+            mlflow.set_experiment("ASTRA(Pre-training)")
             print("MLflow mode is ON. Will log to the configured server.")
         else:
             print("MLflow mode is OFF. Will save CSV and plots to local run directories.")
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     # Example usage of plot_loss function
     #
     # run_log_dir = "/media3/majumder/contrastive_loss_res/"
-    run_log_dir = "/home/torsha/workplace/contrastive_loss_res/exp3.1/run_20251130_211813/"
+    run_log_dir = "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/"
     # run_log_dir = "media3/majumder/contrastive_loss_res/run_20250822_215059/events.out.tfevents.1755892260.clrlsstsrv02.in2p3.fr.2826236.0.v2"
 
     backfill_mlflow_and_plot_loss(

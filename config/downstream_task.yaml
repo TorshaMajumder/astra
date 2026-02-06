@@ -3,45 +3,32 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/nvidia/workplace/contrastive_loss_res/" # Where to save plots and reports
+path_to_save: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
-mlflow_upload: False
+mlflow_upload: True
 mlflow_name: "20251231_140014_nvidia"
 mlflow_exp: "ASTRA(Downstream Tasks)"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-path_to_data: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/embeddings.h5"
-
-# --- Data Sampling Configuration ---
-# For no sampling, set to "None"
-sampling: {
-            "AGN": 1000,
-            "CEP": 1000,
-            "DSCT|GDOR|SXPHE": 1000,
-            "RR": 1000,
-            "ECL": 1000,
-            "ELL": 1000,
-            "LPV": 1000,
-            "RS": 1000,
-            "CV": 1000,
-            "S": 1000,
-            "SOLAR_LIKE": 1000,
-            "YSO": 1000
-        }
+# NOTE: training data is required for all downstream tasks. 
+#       Validation data is only needed for classification task.
+path_to_data: 
+  train: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/train/embeddings.h5"
+  val: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/val/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:
   
   bootstrap: False    # For bootstrapping results
   n_iterations: 100   # For bootstrapping results
-  test_size: 0.2
   random_state: 42
-  # List of classifier models to run. Can be 'lr' (Logistic Regression) or 'rf' (Random Forest)
+  # List of classifier models to run. Can be 'lr' (Logistic Regression) , 'rf' (Random Forest), or 'mlp' (Multi-Layer Perceptron)
   models:
     - lr
     - rf
+    - mlp
 
   # --- Hyperparameters for each model ---
   # These are passed directly to the scikit-learn constructors
@@ -51,19 +38,19 @@ classification_params:
     solver: 'lbfgs'
 
   rf_params:
-    n_estimators: 100
-    max_depth: 25
+    n_estimators: 350
+    max_depth: 50
     n_jobs: 20 # Use all available CPU cores
     min_samples_leaf: 10
-    max_features: 0.1
+    max_features: 0.35
   
   mlp_params:
-    hidden_layers: [256, 128] # Two hidden layers with 256 and 128 neurons
-    dropout_rate: 0.3         # Dropout rate for regularization
-    learning_rate: 0.0001     # Learning rate for the Adam optimizer
+    hidden_layers: [256, 128] # Two hidden layers with 512 and 256 neurons
+    dropout_rate: 0.40        # Dropout rate for regularization
+    learning_rate: 0.00005    # Learning rate for the Adam optimizer
     epochs: 100               # Maximum number of epochs to train for
-    batch_size: 256           # Number of samples per training step
-    patience: 10             # Patience for EarlyStopping
+    batch_size: 512           # Number of samples per training step
+    patience: 10              # Patience for EarlyStopping
 
 
 

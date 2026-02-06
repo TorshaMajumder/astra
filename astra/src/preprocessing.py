@@ -17,6 +17,122 @@ np.random.seed(1024)
 # ===========================================================
 
 @tf.function
+def get_multiview_crops_safe(current_serie, mask_serie, target_len, num_cols):
+    """
+    Generates 3 views (Start, Mid, End) ONLY.
+    """
+    serie_len = tf.shape(current_serie)[0]
+    
+    # --- Helper for Slicing/Padding ---
+    def get_slice_or_pad(mode):
+        if serie_len >= target_len:
+            if mode == 'start':
+                return current_serie[:target_len], mask_serie[:target_len]
+            elif mode == 'end':
+                return current_serie[-target_len:], mask_serie[-target_len:]
+            else: # mid
+                mid_idx = serie_len // 2
+                half = target_len // 2
+                start = tf.maximum(0, mid_idx - half)
+                end = start + target_len
+                # Bounds check
+                offset = tf.maximum(0, end - serie_len)
+                start = start - offset
+                return current_serie[start : start + target_len], \
+                       mask_serie[start : start + target_len]
+        else:
+            # Pad if short
+            padding_rows = target_len - serie_len
+            zero_padding = tf.zeros([padding_rows, num_cols], dtype=current_serie.dtype)
+            feat_padded = tf.concat([current_serie, zero_padding], axis=0)
+            ones_padding = tf.ones([padding_rows], dtype=mask_serie.dtype)
+            mask_padded = tf.concat([mask_serie, ones_padding], axis=0)
+            return feat_padded, mask_padded
+
+    # Generate 3 views
+    start_feat, start_mask = get_slice_or_pad('start')
+    mid_feat, mid_mask     = get_slice_or_pad('mid')
+    end_feat, end_mask     = get_slice_or_pad('end')
+
+    # Return lists of length 3
+    return [start_feat, mid_feat, end_feat], \
+           [start_mask, mid_mask, end_mask]
+
+@tf.function
+def multiview_window(sequence, mask, last_index, bands_tensor, max_len_dict):
+    """
+    Extracts three windows (start, mid, last) of lightcurves from the sequence if the sequence
+    length is larger than max_len, and padding sequence shorter than max_len with zeros.
+
+    Parameters:
+    --------------------------------------------------------------------------------------------
+      sequence: A tensor of shape [num_steps, num_features])
+      mask: mask tensor
+      last_index: a tensor of the indices of the last index of each band in the sequence
+      bands_tensor: the bands in the sequence
+      max_len: The maximum length of each band sequence after sliding window
+
+    Returns:
+    --------------------------------------------------------------------------------------------
+      final_series: An updated sequence with max_len
+                     Output Shape: (3, Total_Seq_Len, Features)
+      final_mask: An updated mask tensor with corresponding masks
+                    Output Shape: (3, Total_Seq_Len)
+    
+    """
+    num_cols = tf.shape(sequence)[1]
+    idx = tf.cast(0, dtype=tf.int32)
+    
+    # Define 3 lists for Start, Mid, End windows
+    views_features = [[], [], []] 
+    views_masks = [[], [], []]
+    #
+    # Find the available bands in the sequence, otherwise return -1
+    # If (g,i) - filters are available in the sequence, it will return {'g':0, 'r':-1, 'i':2}
+    # Remember that the sequence is ordered wrt the filters/keys in the ztf_band dict.
+    #
+    band_indices = {band: tf.cond(
+        tf.reduce_any(tf.equal(bands_tensor, band)),
+        lambda: tf.cast(tf.where(tf.equal(bands_tensor, band))[0][0], tf.int32),
+        lambda: tf.constant(-1, dtype=tf.int32)) for band in ztf_band.keys()}
+
+    for fil in ztf_band.keys():
+        index_in_bands = band_indices[fil]
+        target_len = max_len_dict[fil]
+        is_in_bands = index_in_bands != -1
+        #
+        # If the band is available in the sequence then use multiview window
+        # Else pad zero of "max_len" for that band
+        #
+        if is_in_bands:
+            curr_end = last_index[index_in_bands] + 1
+            current_serie = sequence[idx : curr_end]
+            current_mask = mask[idx : curr_end]
+            idx = curr_end
+            #
+            # Extract the current band and Get 3 views to size "max_len"
+            #
+            feats, masks = get_multiview_crops_safe(current_serie, current_mask, target_len, num_cols)
+            
+        else:
+            # Append zeros for features and ones for mask for the missing band
+            empty_feat = tf.zeros((target_len, num_cols), dtype=sequence.dtype)
+            empty_mask = tf.ones((target_len,), dtype=mask.dtype)
+            feats = [empty_feat] * 3
+            masks = [empty_mask] * 3
+        # Stack the three views for the current band into the respective lists
+        for i in range(3):
+            views_features[i].append(feats[i])
+            views_masks[i].append(masks[i])
+
+    # Stack to create (3, build_seq_Len, Cols) shaped tensors for features and (3, build_seq_Len) for masks
+    final_views_feat = [tf.concat(v, axis=0) for v in views_features]
+    final_views_mask = [tf.concat(v, axis=0) for v in views_masks]
+    
+    return tf.stack(final_views_feat, axis=0), tf.stack(final_views_mask, axis=0)
+
+
+@tf.function
 def get_window(current_serie, mask_serie, max_len, num_cols):
   #
   #
@@ -616,7 +732,7 @@ def create_inference_loader(source,
         # 
         # Use sliding_window to enforce a fixed length sequence
         #
-        final_features, final_mask = sliding_window(
+        final_features, final_mask = multiview_window(
                                                       processed_features,
                                                       initial_mask,
                                                       input_dict['last_index'], 
@@ -627,9 +743,9 @@ def create_inference_loader(source,
         output_dict['id'] = input_dict['id']
         output_dict['label'] = input_dict['label']
         output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) 
-        output_dict['input'] = tf.expand_dims(final_features[:, 1], axis=-1)
-        output_dict['times'] = tf.expand_dims(final_features[:, 0], axis=-1)
-        output_dict['band_info'] = tf.expand_dims(final_features[:, 3], axis=-1)
+        output_dict['input'] = tf.expand_dims(final_features[:, :, 1], axis=-1)
+        output_dict['times'] = tf.expand_dims(final_features[:, :, 0], axis=-1)
+        output_dict['band_info'] = tf.expand_dims(final_features[:, :, 3], axis=-1)
       
         return output_dict
     

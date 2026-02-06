@@ -337,24 +337,24 @@ if __name__ == '__main__':
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/media3/majumder/dataset/resampled_data_120K/test/'
-    target_dir = '/media3/majumder/dataset/resampled_data_120K/'
+    source_dir = '/home/nvidia/workplace/dataset/resampled_data_120K/val/'
+    target_dir = '/home/nvidia/workplace/dataset/training_data/resampled_data_120K/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
     max_lcs_per_chunk = 300   
     oversample = True  # Set to True to enable oversampling when needed
     config = {
-                "AGN": 10000,
-                "CEP": 10000,
-                "DSCT|GDOR|SXPHE": 10000,
-                "RR": 10000,
-                "ECL": 10000,
-                "ELL": 10000,
-                "LPV": 10000,
-                "RS": 10000,
-                "CV": 10000,
-                "S": 10000,
-                "SOLAR_LIKE": 10000,
-                "YSO": 10000
+                "AGN": 2000,
+                "CEP": 2000,
+                "DSCT|GDOR|SXPHE": 2000,
+                "RR": 2000,
+                "ECL": 2000,
+                "ELL": 2000,
+                "LPV": 2000,
+                "RS": 2000,
+                "CV": 2000,
+                "S": 2000,
+                "SOLAR_LIKE": 2000,
+                "YSO": 2000
             }
     main(mode, source_dir, target_dir, split_ratios, max_lcs_per_chunk, config, oversample)
     

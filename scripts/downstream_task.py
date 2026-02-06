@@ -132,7 +132,7 @@ def save_bootstrap_results(results, output_filepath, classifier_type, n_iteratio
     print(f"\nBootstrap results successfully saved to: {output_filepath}\n")
 
 
-def run_bootstrap_classification_task(embeddings, labels, ids, config):
+def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config):
     """
     Splits data, then trains and evaluates all classifiers specified in the config
     on ASTRA embeddings using BOOTSTRAPPING.
@@ -151,7 +151,19 @@ def run_bootstrap_classification_task(embeddings, labels, ids, config):
     # load the Classification parameters 
     #
     class_config = config['classification_params']
-    unique_labels = sorted(np.unique(labels))
+    unique_labels = sorted(np.unique(val_labels))
+    # =============================================================================
+    # 
+    # Encode string labels to integers
+    # 
+    print("\n--- Encoding string labels to integers...")
+    label_encoder = LabelEncoder()
+    train_label_encoded = label_encoder.fit_transform(train_labels)
+    val_label_encoded = label_encoder.transform(val_labels)
+    
+    print(f"---   Found {len(np.unique(train_label_encoded))} classes in training set and {len(np.unique(val_label_encoded))} \
+          classes in validation set.")
+    # --------------------------------------------------------------------------------------------
     #
     # ------------------- Loop through and evaluate each specified model ----------------------
     #
@@ -181,25 +193,21 @@ def run_bootstrap_classification_task(embeddings, labels, ids, config):
         for i in range(class_config['n_iterations']):
             #
             # RESAMPLE WITH REPLACEMENT of the same size as the original dataset
-            boot_embeddings, boot_labels = resample(embeddings, labels, random_state=i)
-            # ------------------------ Split Data into Training and Testing Sets -------------------------
-            X_train, X_test, y_train, y_test = train_test_split(
-                                                                boot_embeddings, boot_labels, test_size=class_config['test_size'], 
-                                                                random_state=class_config['random_state'], stratify=boot_labels
-                                                            )
+            boot_embeddings, boot_labels = resample(train_embeddings, train_label_encoded, random_state=i)
             # -------------- Standardize the Embeddings --------------
+            #
             scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+            X_train_scaled = scaler.fit_transform(boot_embeddings)
+            X_test_scaled = scaler.transform(val_embeddings)
             #
             # ------------------ Train and Evaluate ------------------
-            classifier.fit(X_train_scaled, y_train)
+            classifier.fit(X_train_scaled, boot_labels)
             #
             y_pred = classifier.predict(X_test_scaled)
             # Save metrices
-            accuracies.append(accuracy_score(y_test, y_pred))
+            accuracies.append(accuracy_score(val_label_encoded, y_pred))
             # Use output_dict=True to get a structured report
-            report = classification_report(y_test, y_pred, labels=unique_labels, output_dict=True, zero_division=0)
+            report = classification_report(val_label_encoded, y_pred, labels=unique_labels, output_dict=True, zero_division=0)
             for label in unique_labels:
                 # Safely access the f1-score for each class
                 f1_scores_per_class[str(label)].append(report[str(label)]['f1-score'])
@@ -249,7 +257,7 @@ def run_bootstrap_classification_task(embeddings, labels, ids, config):
 
 
 
-def run_classification_task(embeddings, labels, ids, config):
+def run_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config):
     """
     Splits data, then trains and evaluates all classifiers specified in the config
     on ASTRA embeddings.
@@ -268,46 +276,23 @@ def run_classification_task(embeddings, labels, ids, config):
     # load the Classification parameters and sampling config if exits
     #
     class_config = config.get('classification_params', {}) 
-    sampling_config = config.get('sampling', None) 
-    # ============================ Sampling data =================================
-    if sampling_config is not None:
-        sampled_embeddings, sampled_labels, _ = sample_embeddings(
-                                                                    embeddings, 
-                                                                    labels, 
-                                                                    ids, 
-                                                                    sampling_config,
-                                                                    random_state=class_config.get('random_state') 
-                                                                )
-    else:
-        print("\n--- No sampling configuration found. Using all data...")
-        sampled_embeddings, sampled_labels = embeddings, labels
-    # =============================================================================
     # 
     # Encode string labels to integers
     # 
     print("\n--- Encoding string labels to integers...")
     label_encoder = LabelEncoder()
-    label_encoded = label_encoder.fit_transform(sampled_labels)
-    print(f"---   Found {len(np.unique(label_encoded))} classes!")
+    train_label_encoded = label_encoder.fit_transform(train_labels)
+    val_label_encoded = label_encoder.transform(val_labels)
+    
+    print(f"\n---   Found {len(np.unique(train_label_encoded))} classes in training set and {len(np.unique(val_label_encoded))} classes in validation set.")
     # --------------------------------------------------------------------------------------------
     print("\n-------------------------- Running Supervised Classification Task ---------------------------")
-    #
-    # ------------------------ Split Data into Training and Testing Sets -------------------------
-    #
-    X_train, X_test, y_train, y_test = train_test_split(
-                                                        sampled_embeddings, 
-                                                        label_encoded, 
-                                                        test_size=class_config['test_size'], 
-                                                        random_state=class_config['random_state'], 
-                                                        stratify=label_encoded  
-                                                    )
-    print(f"\nSplitting data into {len(X_train)} training and {len(X_test)} testing samples.")
     #
     # ------------ Standardize the Embeddings ------------
     #
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(train_embeddings)
+    X_test_scaled = scaler.transform(val_embeddings)
     #
     # ----------------------- Loop through and evaluate each specified model ------------------------
     #
@@ -325,9 +310,9 @@ def run_classification_task(embeddings, labels, ids, config):
             #
             # ------------------ Train Classifier ------------------
             print("\nTraining classifier...")
-            classifier.fit(X_train_scaled, y_train)
+            classifier.fit(X_train_scaled, train_label_encoded)
             #
-            print("\nEvaluating on the held-out test split...")
+            print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(X_test_scaled)
             # ------------------------------------------------------
         elif model_key == 'lr':
@@ -336,18 +321,18 @@ def run_classification_task(embeddings, labels, ids, config):
             #
             # ------------------ Train Classifier ------------------
             print("\nTraining classifier...")
-            classifier.fit(X_train_scaled, y_train)
+            classifier.fit(X_train_scaled, train_label_encoded)
             #
-            print("\nEvaluating on the held-out test split...")
+            print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(X_test_scaled)
             # ------------------------------------------------------
         elif model_key == 'mlp':
             print("\n-- Instantiating MLP classifier with params:", model_params)
             history, accuracy, y_pred = mlp_classifier(
                                         X_train_scaled, 
-                                        y_train, 
+                                        train_label_encoded, 
                                         X_test_scaled, 
-                                        y_test, 
+                                        val_label_encoded, 
                                         input_dim=X_train_scaled.shape[1], 
                                         num_classes=len(label_encoder.classes_), 
                                         mlp_params=model_params
@@ -359,8 +344,8 @@ def run_classification_task(embeddings, labels, ids, config):
         #
         # ------------------ Evaluate the classifier ------------------
         #
-        accuracy = accuracy_score(y_test, y_pred)
-        report = classification_report(y_test, y_pred, target_names=label_encoder.classes_)
+        accuracy = accuracy_score(val_label_encoded, y_pred)
+        report = classification_report(val_label_encoded, y_pred, target_names=label_encoder.classes_)
         #
         print(f"\nTest Accuracy: {accuracy * 100:.2f}%")
         print("\nClassification Report:\n", report)
@@ -377,17 +362,17 @@ def run_classification_task(embeddings, labels, ids, config):
         #
         # Compute and reorder the confusion matrix
         #
-        cm = confusion_matrix(y_test, y_pred)
-        cm_perc = confusion_matrix(y_test, y_pred, normalize='true')
+        cm = confusion_matrix(val_label_encoded, y_pred)
+        cm_perc = confusion_matrix(val_label_encoded, y_pred, normalize='true')
         cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
         cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
         # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
         labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
         labels = np.asarray(labels).reshape(cm_reordered.shape)
-        # ---------------- Plots -----------------
+        # -------------------------------- Plots --------------------------
         fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', 
-                    annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale'},
+        sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', vmin=0.0, vmax=1.0,
+                    annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale', 'ticks': [0.0, 0.25, 0.5, 0.75, 1.0],'format': '%.1f'},
                     xticklabels=class_order, yticklabels=class_order)
         plt.xticks(rotation=45, ha='right', fontsize=10)
         plt.yticks(rotation=0, fontsize=10)
@@ -524,20 +509,23 @@ def main():
     #                                                                         'the ASTRA downstream task to MLflow else FALSE.')
     args = parser.parse_args()
     # ==========================================================
-    # --- Load Configuration ---
+    #
+    # ----------------------------------- Load Configuration ----------------------------------------
+    #
     config = load_config(args)
-    # --- Load Data ---
-    print(f"\nLoading data from: {config['path_to_data']}...")
+    # -------------------------------------- Load Training Data -------------------------------------
+    #
     try:
-        with h5py.File(config['path_to_data'], 'r') as hf:
-            embeddings = hf['embeddings'][:]
+        print(f"\nLoading data from: {config['path_to_data']['train']}...")
+        with h5py.File(config['path_to_data']['train'], 'r') as hf:
+            train_embeddings = hf['embeddings'][:]
             labels_raw = hf['labels'][:]
-            ids = hf['ids'][:]
+            train_ids = hf['ids'][:]
         labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
-        labels = np.char.decode(labels_as_bytes, encoding='utf-8')
-        print(f"\nSuccessfully loaded {len(embeddings)} embeddings and {len(ids)} ids...")
+        train_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
+        print(f"\nSuccessfully loaded {len(train_embeddings)} embeddings and {len(train_ids)} ids...")
     except FileNotFoundError:
-        print(f"\nError: HDF5 file not found at path - {config['path_to_data']}")
+        print(f"\nError: HDF5 file not found at path - {config['path_to_data']['train']}")
         return 
     except KeyError as e:
         print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
@@ -549,12 +537,36 @@ def main():
     task_type = config.get('task', '').lower()
     
     if task_type == 'classification':
+        # ------------------------------------------------------------------------------------------------
+        #
+        # LOAD VALIDATION DATA ONLY FOR CLASSIFICATION TASK
+        #
+        # ----------------------------------- Load Validation Data ---------------------------------------
+        try:
+            print(f"\nLoading data from: {config['path_to_data']['val']}...")
+            with h5py.File(config['path_to_data']['val'], 'r') as hf:
+                val_embeddings = hf['embeddings'][:]
+                labels_raw = hf['labels'][:]
+                val_ids = hf['ids'][:]
+            labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
+            val_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
+            print(f"\nSuccessfully loaded {len(val_embeddings)} embeddings and {len(val_ids)} ids...")
+        except FileNotFoundError:
+            print(f"\nError: HDF5 file not found at path - {config['path_to_data']['val']}")
+            return 
+        except KeyError as e:
+            print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
+            print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
+            return
+        # ------------------------------------------------------------------------------------------------
+
         if config["classification_params"].get('bootstrap'):
-            run_bootstrap_classification_task(embeddings, labels, ids, config)
+            run_bootstrap_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
         else:
-            run_classification_task(embeddings, labels, ids, config)
+            run_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
+    
     elif task_type == 'anomaly_detection':
-        run_anomaly_detection_task(embeddings, labels, ids, config)
+        run_anomaly_detection_task(train_embeddings, train_labels, train_ids, config)
     else:
         raise ValueError(f"\nTask type '{config.get('task')}' in config file is not supported. "
                             "Choose 'classification' or 'anomaly_detection'.")

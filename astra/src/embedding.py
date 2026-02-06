@@ -55,6 +55,56 @@ class AstraEmbedding(layers.Layer):
     self.pos_encoding = self.build_positional_encoding() 
     # add the dropout layer
     self.dropout = layers.Dropout(rate)
+  
+  def build_scaled_positional_encoding(self):
+    
+    def scaled_positional_encoding(times):
+      """
+      Parameters:
+      -----------------------------------------------------------------
+          times (tf.Tensor): Time values.
+
+      Returns:
+      -----------------------------------------------------------------
+          tf.Tensor: Positional encoding tensor.
+      """
+      with tf.name_scope("scaled_positional_encoding") as scope:
+
+        if self.mjd:
+            indices = tf.cast(self.time_scaling, dtype=times.dtype)*times
+  
+        else:
+            #
+            # If MJD is False then the timestep will be np.arange(0, times.shape[1]/seq_len)
+            #
+            indices = tf.tile(tf.expand_dims(tf.range(tf.shape(times)[1], dtype=times.dtype), 0), [tf.shape(times)[0], 1])
+            indices = tf.expand_dims(indices, 2)
+
+        angle_rates = tf.exp((tf.range(self.d_model, dtype=times.dtype)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
+        angle_rates = angle_rates[tf.newaxis, tf.newaxis, :]
+        angle_rads = indices * angle_rates
+        #
+        # Use SIN and COSINE function for even and odd indices
+        # Apply sin to even indices in the array; 2i
+        sines = tf.sin(angle_rads[:, :, 0::2])
+        # Apply cos to odd indices in the array; 2i+1
+        cosines = tf.cos(angle_rads[:, :, 1::2])
+        # Interleave sines and cosines
+        # Get shape of angle_rads
+        pos_encoding = tf.reshape(
+                                    tf.stack([sines, cosines], axis=-1),
+                                    [tf.shape(times)[0], tf.shape(times)[1], self.d_model]
+                                )
+        # ------------------------------------------------------------------------------------------
+        # Handle odd d_model dimension if necessary (by padding or adjusting range)
+        if self.d_model % 2 != 0:
+            # Simple approach: repeat last element or handle based on original paper
+            # For now, lets assume d_model is even for simplicity
+            pass 
+        # ------------------------------------------------------------------------------------------
+        return tf.cast(pos_encoding, dtype=times.dtype)
+
+    return scaled_positional_encoding
       
   def build_positional_encoding(self):
     
@@ -74,7 +124,7 @@ class AstraEmbedding(layers.Layer):
       with tf.name_scope("positional_encoding") as scope:
 
         if self.mjd:
-            indices = tf.cast(self.time_scaling, dtype=times.dtype)*times
+            indices = times
         else:
             #
             # If MJD is False then the timestep will be np.arange(0, times.shape[1]/seq_len)
@@ -82,7 +132,7 @@ class AstraEmbedding(layers.Layer):
             indices = tf.tile(tf.expand_dims(tf.range(tf.shape(times)[1], dtype=times.dtype), 0), [tf.shape(times)[0], 1])
             indices = tf.expand_dims(indices, 2)
 
-        angle_rates = tf.exp((tf.range(self.d_model, dtype=times.dtype)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
+        angle_rates = tf.exp((2.0*(tf.range(self.d_model, dtype=times.dtype)//2)) * (-tf.math.log(tf.cast(self.base, dtype=times.dtype))/tf.cast(self.d_model, times.dtype)))
         angle_rates = angle_rates[tf.newaxis, tf.newaxis, :]
         angle_rads = indices * angle_rates
         #

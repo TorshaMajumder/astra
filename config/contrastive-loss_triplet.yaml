@@ -35,22 +35,22 @@ apply_outlier: [False, False, True]
 #
 maxlens:
   - {'g': 300, 'r': 350, 'i': 50}  # Anchor
-  - {'g': 150, 'r': 175, 'i': 25}  # Positive
-  - {'g': 300, 'r': 350, 'i': 50}  # Negative
+  - {'g': 150, 'r': 175, 'i': 25}  # Canonical Positive
+  - {'g': 300, 'r': 350, 'i': 50}  # Hard Positive
 bin_widths: [5, 5, 5]
 drop_rates: [0.0, 0.0, 0.50]
 #
 # --- Transformer Model Parameters ---
 #
-num_layers: 5          # Number of encoder layers
+num_layers: 4          # Number of encoder layers
 mjd: True              # Use MJD for positional encoding
-base: 14400000         # Base for positional encoding
+base: 10000.0          # Base for positional encoding
 d_model: 512           # Embedding dimension
 num_heads: 8           # Number of attention heads
 dff: 2048              # Feed-forward network dimension
 rate: 0.1              # Dropout rate
 use_band_info: True    # Use segment embeddings
-time_scaling: 904.78   # Scaling factor for time indices in positional encoding (288 * np.pi)
+# time_scaling: 904.78   # Scaling factor for time indices in positional encoding (288 * np.pi)
 use_drop: True         # Use dropout
 projection_dim: 256    # Projection head dimension 
 #
@@ -61,8 +61,9 @@ initial_lr: 0.0001    # initial_lr=lr, # Only if use_custom_schedule=False
 use_custom_schedule: True
 warmup_steps: 1000
 buffer_size: 100000   # Shuffle buffer size for CPU training, 100000 for GPU training.
-
+#
 # --- Mlflow Configuration -----
+#
 mlflow_upload: True
 mlflow_exp: "ASTRA(Pre-training)"
 

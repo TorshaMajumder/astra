@@ -28,10 +28,11 @@ if gpus:
 # ===========================================================
 # SUPPRESS TF WARNINGS
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 os.system('clear')
 # ===========================================================
 
-def finetune_model(config):
+def supervised_finetuning(config):
     # ===============================================
     # ------------- Device Strategy Setup -----------
     #
@@ -64,6 +65,7 @@ def finetune_model(config):
         num_inter_threads = 0 # Let TensorFlow decide
         tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
     # ====================================================================================================
+    
     # ====================================================================================================
     # Load the hyper-parameters of the model from the path
     #
@@ -75,7 +77,7 @@ def finetune_model(config):
     #
     try: 
         if run_directory:
-            finetune_dir = os.path.join(run_directory, f"finetune_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            finetune_dir = os.path.join(config['path_to_save'], f"finetune_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
             os.makedirs(finetune_dir, exist_ok=True)
             print(f"\n'{finetune_dir}' is created.\n")
     except Exception as e:
@@ -112,6 +114,7 @@ def finetune_model(config):
     # Using ANCHOR view sequence length, i.e., build_seg_len
     #
     build_seq_len = sum(config['max_len'].values()) 
+    num_views = 3
     dummy_input = {
         'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
         'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
@@ -141,25 +144,33 @@ def finetune_model(config):
     # 
     print("\n --Extracting ASTRA encoder for generating embeddings...")
     #
-    # Define the inputs with a fixed sequence length
-    # It should match build_seq_len
+    # Define the two input dict with a fixed sequence length
+    # input layers for multi-view window inputs & single-view inputs for single-view window/sliding window
     #
     input_layer = {
-        'input': tf.keras.Input(shape=(build_seq_len, 1), name='input', dtype=tf.float32),
-        'times': tf.keras.Input(shape=(build_seq_len, 1), name='times', dtype=tf.float32),
-        'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='band_info', dtype=tf.float32),
-        'mask': tf.keras.Input(shape=(build_seq_len,), name='mask', dtype=tf.float32)
+        'input': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='input', dtype=tf.float32),
+        'times': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='times', dtype=tf.float32),
+        'band_info': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='band_info', dtype=tf.float32),
+        'mask': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='mask', dtype=tf.float32) 
+    }
+    # It should match build_seq_len
+    single_view_input = {
+        'input': tf.keras.Input(shape=(build_seq_len, 1), name='sv_input'),
+        'times': tf.keras.Input(shape=(build_seq_len, 1), name='sv_times'),
+        'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='sv_band_info'),
+        'mask': tf.keras.Input(shape=(build_seq_len,), name='sv_mask')
     }
     # ------------------------------------------------------------------------------------------------
     #
+    # NOTE: The ASTRA encoder takes single view inputs only. 
     # (STEP:1) Get the embeddings from the embedding layer 
     # The embedding layer takes the full dictionary of inputs
     #
-    embeddings = model.embedding_layer(input_layer)
+    embeddings = model.embedding_layer(single_view_input)
     #
     # Get the mask tensor from the input dictionary (IMPORTANT for encoder and pooling laye)
     # 
-    mask_input = input_layer['mask']
+    mask_input = single_view_input['mask']
     #
     # (STEP:2) Get the embeddings and the attention weights
     #
@@ -174,17 +185,47 @@ def finetune_model(config):
     #
     # (STEP:4) Get the final ASTRA encoder model 
     #
-    encoder_model = tf.keras.Model(inputs=input_layer, outputs=[pooled_output, all_attention_weights], name="ASTRA_Encoder")
+    single_view_encoder = tf.keras.Model(inputs=single_view_input, outputs=pooled_output, name="ASTRA_Encoder")
+    # =========================================================================================================
+    # --- (STEP:5) Process each view through the ASTRA encoder ---
     #
-    # (STEP:5) Create the supervised finetuned ASTRA model 
+    view_embeddings = []
+    for i in range(num_views):
+        # Slice the i-th view from the main inputs
+        input_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'input_slice_{i}')(input_layer['input'])
+        times_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'times_slice_{i}')(input_layer['times'])
+        band_info_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'band_info_slice_{i}')(input_layer['band_info'])
+        # Slice AND Reshape the Mask
+        mask_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i, :, 0], name=f'mask_slice_{i}')(input_layer['mask'])
+        # Create the input dictionary for this single view
+        current_view_input_dict = {
+            'input': input_view_slice,
+            'times': times_view_slice,
+            'band_info': band_info_view_slice,
+            'mask': mask_view_slice # shape is (Batch, Seq_Len)
+        }    
+        # Get the embedding for each view
+        view_embedding = single_view_encoder(current_view_input_dict)
+        view_embeddings.append(view_embedding)
+    # --- (STEP:6) Aggregate the embeddings from all views by CONCATENATING ---
+    if len(view_embeddings) > 1:
+        # Concatenate along the last axis (the feature dimension)
+        # Input: A list of 4 tensors, each of shape (batch_size, 512)
+        # Output: A single tensor of shape (batch_size, 4 * 512) -> (batch_size, 2048)
+        aggregated_embedding = tf.keras.layers.Concatenate(axis=-1, name='aggregate_embeddings')(view_embeddings)
+    else:
+        aggregated_embedding = view_embeddings[0]
     #
-    finetune_model = finetune_model(encoder_model=encoder_model,
-                                    num_classes=num_classes,
-                                    unfreeze_layers=config['unfreeze_layers']
+    # (STEP:7) Create the supervised finetuned ASTRA model 
+    #
+    finetuned_model = finetune_model(encoder_model=single_view_encoder,
+                                        num_classes=num_classes,
+                                        final_inputs=input_layer,         
+                                        aggregated_embedding=aggregated_embedding,
+                                        unfreeze_layers=config['unfreeze_layers']
                                 )
-   
     print("\n -- Supervised Finetuned ASTRA model created successfully...!\n")
-    finetune_model.summary()
+    finetuned_model.summary()
     # =================================================================================================================
     #
     # ------------------ Prepare the Finetuning Data Loader -----------------------------------
@@ -208,19 +249,11 @@ def finetune_model(config):
                                         source_dir=config['path_to_val'], 
                                         batch_size=config['batch_size'],
                                         label_map=config['label_map'],
-                                        maxlen=config['max_len'],
+                                        max_len=config['max_len'],
                                         is_training=False,
                                         apply_white_noise=False 
                                     )
     # ==================================================================================================================
-    #
-    # ------------------------------- Calculate steps_per_epoch ----------------------------------------
-    # 
-    n_samples = 114 
-    steps_per_epoch = n_samples // config['batch_size']
-    if n_samples % config['batch_size'] != 0:
-        steps_per_epoch += 1 
-    print(f"\n--- Calculated steps_per_epoch for fine-tuning: {steps_per_epoch}.\n")
     #
     # ------------------------------- Compile the model and train --------------------------------------
     # 
@@ -228,7 +261,8 @@ def finetune_model(config):
     optimizer = tf.keras.optimizers.Adam(learning_rate=config['lr'])
     metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
     #
-    finetune_model.compile(
+    
+    finetuned_model.compile(
                             optimizer=optimizer,
                             loss=loss_fn,
                             metrics=metrics
@@ -257,12 +291,11 @@ def finetune_model(config):
 
     print(f"\n{'='*20} Starting Fine-tuning {'='*20}\n")
     
-    _ = finetune_model.fit(
+    _ = finetuned_model.fit(
                             train_loader,
                             epochs=config['epochs'],
                             validation_data=val_loader,
-                            callbacks=[checkpoint_callback, early_stopping_callback, tensorboard_callback],
-                            steps_per_epoch=steps_per_epoch 
+                            callbacks=[checkpoint_callback, early_stopping_callback, tensorboard_callback]
                         )
 
     print("\n--- Fine-tuning complete!")
@@ -270,11 +303,6 @@ def finetune_model(config):
     
     # ==================================================================================================================
 
-
-    
-
-
-    
 
 
 
@@ -294,85 +322,10 @@ def main():
     # ==========================================================
     # --- Load Configuration ---
     config = load_config(args)
-    finetune_model(config)
+    supervised_finetuning(config)
     
     
-     
 
-
-
-
-
-
-# Fine-tuning HParams
-FINETUNE_LR = 1e-5 # CRITICAL: Use a very small learning rate
-BATCH_SIZE = 32    # Can be smaller for fine-tuning
-EPOCHS = 100
-PATIENCE = 15
-UNFREEZE_LAYERS = 2 # e.g., unfreeze the last 2 EncoderLayers
-FRACTION = 0.01   # Use 1% of the data
-NUM_CLASSES = len(LABEL_MAP)
-
-
-
-
-
-
-
-
-# --- Calculate steps_per_epoch ---
-# You need the size of your 1% subset, which the loader prints out.
-# Let's assume the loader prints: "Using 1.0% of candidates for training: 125 samples."
-num_finetune_samples = 114 # <--- Get this number from the loader's print output
-steps_per_epoch = num_finetune_samples // BATCH_SIZE
-if num_finetune_samples % BATCH_SIZE != 0:
-    steps_per_epoch += 1 # Add one step for the remainder batch
-print(f"Calculated steps_per_epoch for fine-tuning: {steps_per_epoch}")
-
-# --- 5. COMPILE THE MODEL AND TRAIN ---
-# Use a standard classification loss and optimizer
-loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-optimizer = tf.keras.optimizers.Adam(learning_rate=FINETUNE_LR)
-metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
-
-finetune_model.compile(
-    optimizer=optimizer,
-    loss=loss_fn,
-    metrics=metrics
-)
-
-# Use Callbacks for saving the best model and early stopping
-checkpoint_path = os.path.join(finetune_dir, "best_finetuned_model.weights.h5")
-checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-    filepath=checkpoint_path,
-    save_weights_only=True,
-    monitor='val_sparse_categorical_accuracy', # Monitor validation accuracy
-    mode='max', # Save the model with the highest accuracy
-    save_best_only=True,
-    verbose=1
-)
-
-early_stopping_callback = tf.keras.callbacks.EarlyStopping(
-    monitor='val_sparse_categorical_accuracy',
-    patience=PATIENCE,
-    mode='max',
-    verbose=1,
-    restore_best_weights=True # Good practice for early stopping
-)
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=finetune_dir)
-
-print("\n--- Starting Fine-tuning ---")
-history = finetune_model.fit(
-    train_loader,
-    epochs=EPOCHS,
-    validation_data=val_loader,
-    callbacks=[checkpoint_callback, early_stopping_callback],
-    steps_per_epoch=steps_per_epoch # <--- ADD THIS ARGUMENT
-)
-
-print("\n--- Fine-tuning complete! ---")
-print(f"The best fine-tuned model weights are saved at: {checkpoint_path}")
-# The best model weights are saved at `checkpoint_path`
 
 
 if __name__ == '__main__':

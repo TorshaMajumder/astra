@@ -5,8 +5,8 @@ import os
 import logging
 import numpy as np
 import tensorflow as tf
-from astra.utils.helper import standardize
-from astra.src.preprocessing import deserialize, sliding_window, gaussian_noise
+from astra.src.preprocessing import gaussian_noise, multiview_window
+from astra.utils.helper import standardize, deserialize_for_inference
 # ===========================================================
 AUTO = tf.data.AUTOTUNE
 os.system('clear')
@@ -31,7 +31,9 @@ def finetune_data_loader(source_dir,
 
     Parameters:
     ----------------------------------------------------------------------------------------
-    source_dir (str): Path to the root of the original dataset (e.g., './dataset').
+    source (string): Record folder
+                      NOTE: source is of the format - /train/partition_{k}/{class}/chunk_{n}_{m}.record
+                                                    - /val/{class}/chunk_{n}_{m}.record
     batch_size (int): Batch_size for fine-tined model
     label_map (dict): A nested dictionary mapping class names to the desired number of samples.
                             e.g., {'CEP': 20000, 'AGN': 6000}
@@ -47,7 +49,12 @@ def finetune_data_loader(source_dir,
     Tensorflow Dataset: Iterator with pre-processed batches. 
     """
     # --------------------------------------------------------------------------------------
-    glob_pattern = os.path.join(source_dir, '*', 'chunk_*.record')
+    # ------------------------------ File Discovery using Glob Pattern ---------------------
+    if is_training:
+        glob_pattern = os.path.join(source_dir,'*', '*','chunk_*.record')
+    else:
+        glob_pattern = os.path.join(source_dir,'*','chunk_*.record')
+    # --------------------------------------------------------------------------------------
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=is_training)
 
     
@@ -58,7 +65,7 @@ def finetune_data_loader(source_dir,
         '''
         # --------------------------------------------------------------------------------
         # Load the records
-        input_dict = deserialize(data_record)
+        input_dict = deserialize_for_inference(data_record)
         # --------------------------------------------------------------------------------
         # Remap classes to broader classes (if any)
         #
@@ -158,6 +165,15 @@ def finetune_data_loader(source_dir,
             for ds in subset_datasets[1:]:
                 final_dataset = final_dataset.concatenate(ds)
         # ---------------------------------------------------------------------------      
+        print(f"\n--- Caching the balanced subset (2% data) into memory...")
+        final_dataset = final_dataset.cache()
+        #
+        # Shuffle and store the cached dataset 
+        # 
+        final_dataset = final_dataset.shuffle(buffer_size=buffer_size) 
+        # Repeat indefinitely for training
+        # final_dataset = final_dataset.repeat()
+    
     else:
         # For validation, use all candidates found
         final_dataset = candidate_dataset
@@ -193,22 +209,25 @@ def finetune_data_loader(source_dir,
         # 1: Masked values 
         #
         initial_mask = tf.zeros(tf.shape(std_mags)[0], dtype=tf.float32)
-        #
-        # Enforce fixed length
         # 
-        final_features, final_mask = sliding_window(
-                                                    processed_features,
-                                                    initial_mask,
-                                                    input_dict['last_index'], 
-                                                    input_dict['bands'], 
-                                                    max_len
-                                                )
+        # Get the 3 sliding windows, i.e., (start, middle, end) views for each band, where num_views = 3 
+        # Enforce fixed length sequences as per max_len
+        # NOTE: shape of the final_features will be (num_views, max_len, feature_dim)
+        #       shape of the final_mask will be (num_views, max_len)
+        # 
+        final_features, final_mask = multiview_window(
+                                                        processed_features,
+                                                        initial_mask,
+                                                        input_dict['last_index'], 
+                                                        input_dict['bands'], 
+                                                        max_len
+                                                    )
         # Prepare model inputs
         model_inputs = {
-                        'input': tf.expand_dims(final_features[:, 1], axis=-1),
-                        'times': tf.expand_dims(final_features[:, 0], axis=-1),
-                        'band_info': tf.expand_dims(final_features[:, 3], axis=-1),
-                        'mask': final_mask
+                        'input': tf.expand_dims(final_features[:, :, 1], axis=-1),
+                        'times': tf.expand_dims(final_features[:, : , 0], axis=-1),
+                        'band_info': tf.expand_dims(final_features[:, : , 3], axis=-1),
+                        'mask': tf.expand_dims(final_mask, axis=-1) 
                     }
         # Map the remapped string label to a final integer ID
         label_id = table.lookup(mapped_label)
@@ -221,10 +240,6 @@ def finetune_data_loader(source_dir,
     # Filter out any samples with unknown labels (ID = -1)
     final_dataset = final_dataset.filter(lambda inputs, label: label != -1)
     #
-    if is_training:
-        # Shuffle the small subset again for good measure
-        final_dataset = final_dataset.shuffle(buffer_size=buffer_size)
-    #
     # Batch and prefetch
     #
     final_loader = final_dataset.batch(batch_size).prefetch(buffer_size=AUTO)
@@ -232,14 +247,17 @@ def finetune_data_loader(source_dir,
     return final_loader
 
 
-def finetune_model(encoder_model, num_classes, unfreeze_layers=None): 
+def finetune_model(encoder_model, final_inputs, aggregated_embedding, num_classes, unfreeze_layers=None): 
     """
     Takes a pre-trained ASTRA encoder and adds a classification head for fine-tuning.
 
     Parameters:
     ------------------------------------------------------------------------------------
         encoder_model (tf.keras.Model): The pre-trained ASTRA encoder model.
+        final_inputs (dict): The input layers for the final model.
+        aggregated_embedding (tf.Tensor): The aggregated embedding tensor from the encoder.
         num_classes (int): The number of output classes for the classifier.
+                            NOTE: the aggregated_embedding is from the multi-view windowing
         unfreeze_layers (int, optional): The number of layers to unfreeze from the end
                                          of the encoder. If None, the entire encoder
                                          remains frozen (linear probing). If 'all',
@@ -290,16 +308,14 @@ def finetune_model(encoder_model, num_classes, unfreeze_layers=None):
     # ===========================================================================================================================================
     #
     # --------------------------- Build the new classification model --------------------------
-    # Get the inputs from the pre-trained encoder model
-    inputs = encoder_model.input
-    # Get the output of the pre-trained encoder (the embeddings)
-    x = encoder_model.output
-    # Add a new classification head
-    x = tf.keras.layers.Dropout(0.2)(x) # Add dropout for regularization
-    outputs = tf.keras.layers.Dense(num_classes, name='classifier_head')(x) # Output logits
-    # Create the final model
-    finetune_model = tf.keras.Model(inputs=inputs, outputs=outputs, name="ASTRA_Classifier")
-
+    # Use the aggregated embedding passed from the main script
+    x = aggregated_embedding
+    # Add the classification head
+    x = tf.keras.layers.Dropout(0.2)(x) 
+    outputs = tf.keras.layers.Dense(num_classes, name='classifier_head')(x) 
+    # Create the finetuned model using the Multi-View inputs passed from the main script
+    finetune_model = tf.keras.Model(inputs=final_inputs, outputs=outputs, name="ASTRA_Classifier")
+    #
     return finetune_model
     # =============================================================================================================
 
