@@ -51,7 +51,7 @@ astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --
 ```
 ## Generate ASTRA embeddings for "Contrastive loss" framework
 ```
-astra-embeddings --loss contrastive --config ../config/contrastive-loss_embeddings.yaml --batch_size 500 --finetune False
+astra-embeddings --loss contrastive --config ../config/contrastive-loss_embeddings.yaml --batch_size 500 
 ```
 ## Perform Downstream tasks for ASTRA framework
 ```

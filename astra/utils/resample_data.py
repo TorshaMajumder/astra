@@ -57,7 +57,7 @@ def diagnose_corrupted_files(source_dir, class_name=None):
         print(f"\n--- Diagnosing files for class: {class_name} ---")
         search_pattern = os.path.join(source_dir, '*', class_name, '*.record')
     else:
-        search_pattern = os.path.join(source_dir, '*', '*.record')
+        search_pattern = os.path.join(source_dir, '*', '*', '*.record')
     # -------------------------------------------------------------------------
     filenames = glob.glob(search_pattern)
     # -------------------------------------------------------------------------
@@ -109,7 +109,7 @@ def analyze_duplicates(source_dir):
     # Adjust the search pattern. 
     # Default is - source_dir + "/partition_0/CEP/chunk_0_0.record"
     #
-    search_pattern = os.path.join(source_dir, '*')
+    search_pattern = os.path.join(source_dir, '*', '*')
     class_dirs = [d for d in glob.glob(search_pattern) if os.path.isdir(d)]
     print(f"\nFound {len(class_dirs)} tf.record files to process...\n")
     if not class_dirs:
@@ -337,7 +337,7 @@ if __name__ == '__main__':
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/home/nvidia/workplace/dataset/resampled_data_120K/val/'
+    source_dir = '/home/nvidia/workplace/dataset/all_dataset/test/'
     target_dir = '/home/nvidia/workplace/dataset/training_data/resampled_data_120K/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
     max_lcs_per_chunk = 300   

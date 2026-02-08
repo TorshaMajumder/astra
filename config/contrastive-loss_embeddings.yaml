@@ -3,9 +3,9 @@
 # --- Data set Paths ---
 #
 path_to_load: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/finetune_20260204_091618/"
-path_to_data: "/home/nvidia/workplace/dataset/training_data/val/"
-path_to_save: "/home/nvidia/workplace/dataset/training_data/finetuning/val/"
-path_to_class_count: "/home/nvidia/workplace/dataset/training_data/val/data_stats.csv"
+path_to_data: "/home/nvidia/workplace/dataset/all_dataset/test/"
+path_to_save: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/"
+path_to_class_count: "/home/nvidia/workplace/dataset/all_dataset/test/data_stats.csv"
 #
 # --- Inference parameters ---
 #

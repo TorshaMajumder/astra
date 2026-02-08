@@ -2,8 +2,8 @@
 
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
-task: classification
-path_to_save: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/" # Where to save plots and reports
+task: anomaly_detection
+path_to_save: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
@@ -15,8 +15,8 @@ mlflow_exp: "ASTRA(Downstream Tasks)"
 # NOTE: training data is required for all downstream tasks. 
 #       Validation data is only needed for classification task.
 path_to_data: 
-  train: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/train/embeddings.h5"
-  val: "/home/nvidia/workplace/dataset/resampled_data_120K/pre-training/val/embeddings.h5"
+  train: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/embeddings.h5"
+  # val: "/home/nvidia/workplace/dataset/training_data/finetuning/val/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:
@@ -58,12 +58,12 @@ classification_params:
 # --- Anomaly Detection Task Parameters ---
 anomaly_detection_params:
   
-  inspect_samples: 10   # Number of anomalies to inspect
+  inspect_samples: 100   # Number of anomalies to inspect
   # List of models to run. Can be 'if' (Isolation Forest)
   models: 
     - 'if'
   
   # --- Hyperparameters for each model ---
   if_params:
-    n_jobs: 10
+    n_jobs: 30
     random_seed: 42

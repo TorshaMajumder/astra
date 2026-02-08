@@ -12,10 +12,9 @@ from sklearn.utils import resample
 from collections import defaultdict
 from astra.utils.helper import load_config
 from astra.src.classifier import mlp_classifier
-# from coniferest.isoforest import IsolationForest
+from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 # ==========================================================
@@ -194,16 +193,24 @@ def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids,
             #
             # RESAMPLE WITH REPLACEMENT of the same size as the original dataset
             boot_embeddings, boot_labels = resample(train_embeddings, train_label_encoded, random_state=i)
-            # -------------- Standardize the Embeddings --------------
+            if model_key == 'rf':
+                #
+                # ------------------ Train and Evaluate ------------------
+                classifier.fit(boot_embeddings, boot_labels)
+                y_pred = classifier.predict(val_embeddings)
+                #
+            elif model_key == 'lr':
+                # -------------- Standardize the Embeddings --------------
+                #
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(boot_embeddings)
+                X_test_scaled = scaler.transform(val_embeddings)
             #
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(boot_embeddings)
-            X_test_scaled = scaler.transform(val_embeddings)
-            #
-            # ------------------ Train and Evaluate ------------------
-            classifier.fit(X_train_scaled, boot_labels)
-            #
-            y_pred = classifier.predict(X_test_scaled)
+                # ------------------ Train and Evaluate ------------------
+                classifier.fit(X_train_scaled, boot_labels)
+                #
+                y_pred = classifier.predict(X_test_scaled)
+                # ------------------------------------------------------
             # Save metrices
             accuracies.append(accuracy_score(val_label_encoded, y_pred))
             # Use output_dict=True to get a structured report
@@ -310,10 +317,10 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             #
             # ------------------ Train Classifier ------------------
             print("\nTraining classifier...")
-            classifier.fit(X_train_scaled, train_label_encoded)
+            classifier.fit(train_embeddings, train_label_encoded)
             #
             print("\nEvaluating on the held-out validation data...")
-            y_pred = classifier.predict(X_test_scaled)
+            y_pred = classifier.predict(val_embeddings)
             # ------------------------------------------------------
         elif model_key == 'lr':
             print("\n-- Instantiating Logistic Regression classifier with params:", model_params)
@@ -321,7 +328,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             #
             # ------------------ Train Classifier ------------------
             print("\nTraining classifier...")
-            classifier.fit(X_train_scaled, train_label_encoded)
+            classifier.fit(X_train_scaled , train_label_encoded)
             #
             print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(X_test_scaled)
@@ -566,7 +573,9 @@ def main():
             run_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
     
     elif task_type == 'anomaly_detection':
+        
         run_anomaly_detection_task(train_embeddings, train_labels, train_ids, config)
+    
     else:
         raise ValueError(f"\nTask type '{config.get('task')}' in config file is not supported. "
                             "Choose 'classification' or 'anomaly_detection'.")

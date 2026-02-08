@@ -200,7 +200,7 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
 
 
 
-def contrastive_embeddings(args):
+def contrastive_embeddings(config):
     # ===============================================
     # ------------- Device Strategy Setup -----------
     #
@@ -209,12 +209,12 @@ def contrastive_embeddings(args):
     #
     # Use user-specified GPUs. Otherwise, use all available GPUs.
     #
-    if args.num_gpus is not None and args.num_gpus > 0:
-        if args.num_gpus > len(gpus):
-            print(f"\nWarning: Requested {args.num_gpus} GPUs, but only {len(gpus)} are available. Using all available.\n")
+    if config['num_gpus'] is not None and config['num_gpus'] > 0:
+        if config['num_gpus'] > len(gpus):
+            print(f"\nWarning: Requested {config['num_gpus']} GPUs, but only {len(gpus)} are available. Using all available.\n")
             gpus_to_use = gpus
         else:
-            gpus_to_use = gpus[:args.num_gpus]
+            gpus_to_use = gpus[:config['num_gpus']]
         #
         # Make only the selected GPUs visible to TensorFlow
         #
@@ -233,12 +233,6 @@ def contrastive_embeddings(args):
         num_inter_threads = 0 # Let TensorFlow decide
         tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
     # ====================================================================================================
-    # ===============================================
-    # Load the YAML configuration file
-    #
-    # --- Load Configuration ---
-    config = load_config(args)
-    # ==============================================
     # ====================================================================================================
     # Load the hyper-parameters of the model from the path
     #
@@ -430,12 +424,7 @@ def clustered_embeddings():
     """
     pass
 
-def finetuned_contrastive_embeddings(args):
-    # ===============================================
-    # Load the YAML configuration file
-    #
-    # --- Load Configuration ---
-    config = load_config(args)
+def finetuned_contrastive_embeddings(config):
     # ===============================================
     # ------------- Device Strategy Setup -----------
     #
@@ -715,7 +704,6 @@ def main():
     parser.add_argument('--loss', type=str, required=True, help='Provide the loss function as contrastive or clustering.' \
                                                                 ' NOTE: clustering loss not yet implemented. We currently support contrastive loss only.')
     parser.add_argument('--config', type=str, required=True, help='Path to the YAML configuration file.')
-    parser.add_argument('--finetune', type=bool, required=True, default=False, help='Generate finetuned embeddings.')
     # ==========================================================
     # Optional arguments to override config file parameters
     # ==========================================================
@@ -724,14 +712,19 @@ def main():
     
     args = parser.parse_args()
     # ==========================================================
+    #
+    # ----------------------------------- Load Configuration ----------------------------------------
+    #
+    config = load_config(args)
+    # -------------------------------------- Load Training Data -------------------------------------
     if args.loss == "contrastive":
-        if args.finetune:
-            finetuned_contrastive_embeddings(args)
+        if config['finetune']:
+            finetuned_contrastive_embeddings(config)
         else:
-            contrastive_embeddings(args)
+            contrastive_embeddings(config)
     
     elif args.loss == "clustering":
-        clustered_embeddings(args)
+        clustered_embeddings(config)
     
     else:
         print("\nError: Unsupported loss function specified. Use 'contrastive' or 'clustering'.\n")
