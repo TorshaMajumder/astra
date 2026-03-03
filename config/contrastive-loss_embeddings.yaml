@@ -2,19 +2,19 @@
 #
 # --- Data set Paths ---
 #
-path_to_load: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/finetune_20260204_091618/"
-path_to_data: "/home/nvidia/workplace/dataset/all_dataset/test/"
-path_to_save: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/"
-path_to_class_count: "/home/nvidia/workplace/dataset/all_dataset/test/data_stats.csv"
+path_to_load: "/home/nvidia/workplace/contrastive_loss_res/run_20260217_201958/"
+path_to_data: "/home/nvidia/workplace/dataset/resampled_data_120K/val/"
+path_to_save: "/home/nvidia/workplace/astra_storage/emb/run_20260217_201958/resampled_data_120K/pre-training/val/"
+path_to_class_count: "/home/nvidia/workplace/dataset/resampled_data_120K/val/data_stats.csv"
 #
 # --- Inference parameters ---
 #
-finetune: True       # Flag to load best finetuned weights for generating embeddings
+finetune: False      # Flag to load best finetuned weights for generating embeddings
 batch_size: 10       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
-num_gpus: 1           # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
+num_gpus: 1          # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
 max_len: {'g': 300, 'r': 350, 'i': 50} # Using ANCHOR view sequence length, i.e., build_seg_len
-mlflow_upload: True   # Upload the UMAP embedding plot to MLflow?
-mlflow_name: "20251231_140014_nvidia" # Set the name where you want to upload the plot
+mlflow_upload: False  # Upload the UMAP embedding plot to MLflow?
+mlflow_name: "20260217_201958_nvidia" # Set the name where you want to upload the plot
 mlflow_exp: "ASTRA(Embeddings)"
 #
 # --- Required only when finetuning is True ---

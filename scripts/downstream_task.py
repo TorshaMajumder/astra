@@ -12,7 +12,7 @@ from sklearn.utils import resample
 from collections import defaultdict
 from astra.utils.helper import load_config
 from astra.src.classifier import mlp_classifier
-from coniferest.isoforest import IsolationForest
+# from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -520,61 +520,95 @@ def main():
     # ----------------------------------- Load Configuration ----------------------------------------
     #
     config = load_config(args)
+    # Load paths
+    path_to_data = config.get('path_to_data', {})
     # -------------------------------------- Load Training Data -------------------------------------
     #
     try:
-        print(f"\nLoading data from: {config['path_to_data']['train']}...")
-        with h5py.File(config['path_to_data']['train'], 'r') as hf:
-            train_embeddings = hf['embeddings'][:]
-            labels_raw = hf['labels'][:]
-            train_ids = hf['ids'][:]
-        labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
-        train_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
-        print(f"\nSuccessfully loaded {len(train_embeddings)} embeddings and {len(train_ids)} ids...")
+        if path_to_data.get('train'):
+            print(f"\nLoading data from: {path_to_data['train']}...")
+            with h5py.File(path_to_data['train'], 'r') as hf:
+                train_embeddings = hf['embeddings'][:]
+                labels_raw = hf['labels'][:]
+                train_ids = hf['ids'][:]
+            labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
+            train_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
+            print(f"\nSuccessfully loaded {len(train_embeddings)} embeddings and {len(train_ids)} ids...")
+    
     except FileNotFoundError:
-        print(f"\nError: HDF5 file not found at path - {config['path_to_data']['train']}")
+        print(f"\nError: HDF5 file not found at path - {path_to_data['train']}")
         return 
     except KeyError as e:
         print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
         print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
         return
     # ------------------------------------------------------------------------------------------------
-    
-    # --- Execute the Correct Task Based on Config ---
-    task_type = config.get('task', '').lower()
-    
-    if task_type == 'classification':
-        # ------------------------------------------------------------------------------------------------
-        #
-        # LOAD VALIDATION DATA ONLY FOR CLASSIFICATION TASK
-        #
-        # ----------------------------------- Load Validation Data ---------------------------------------
-        try:
-            print(f"\nLoading data from: {config['path_to_data']['val']}...")
-            with h5py.File(config['path_to_data']['val'], 'r') as hf:
+    # ------------------------------------------------------------------------------------------------
+    # ----------------------------------- Load Validation Data ---------------------------------------
+    try:
+        if path_to_data.get('val'):
+            print(f"\nLoading data from: {path_to_data['val']}...")
+            with h5py.File(path_to_data['val'], 'r') as hf:
                 val_embeddings = hf['embeddings'][:]
                 labels_raw = hf['labels'][:]
                 val_ids = hf['ids'][:]
             labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
             val_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
             print(f"\nSuccessfully loaded {len(val_embeddings)} embeddings and {len(val_ids)} ids...")
-        except FileNotFoundError:
-            print(f"\nError: HDF5 file not found at path - {config['path_to_data']['val']}")
-            return 
-        except KeyError as e:
-            print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
-            print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
-            return
-        # ------------------------------------------------------------------------------------------------
-
+    except FileNotFoundError:
+        print(f"\nError: HDF5 file not found at path - {path_to_data['val']}")
+        return 
+    except KeyError as e:
+        print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
+        print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
+        return
+    # ------------------------------------------------------------------------------------------------
+    # --- Execute the Correct Task Based on Config ---
+    task_type = config.get('task', '').lower()
+    
+    if task_type == 'classification':
+        
         if config["classification_params"].get('bootstrap'):
             run_bootstrap_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
         else:
             run_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
     
     elif task_type == 'anomaly_detection':
+        if path_to_data.get('test'):
+            # ------------------------------------------------------------------------------------------------
+            #
+            # LOAD TEST DATA ONLY FOR ANOMALY DETECTION TASK
+            #
+            # ----------------------------------- Load Validation Data ---------------------------------------
+            try:
+                print(f"\nLoading data from: {path_to_data['test']}...")
+                with h5py.File(path_to_data['test'], 'r') as hf:
+                    test_embeddings = hf['embeddings'][:]
+                    labels_raw = hf['labels'][:]
+                    test_ids = hf['ids'][:]
+                labels_as_bytes = np.array(labels_raw, dtype=np.bytes_)
+                test_labels = np.char.decode(labels_as_bytes, encoding='utf-8')
+                print(f"\nSuccessfully loaded {len(test_embeddings)} embeddings and {len(test_ids)} ids...")
+            except FileNotFoundError:
+                print(f"\nError: HDF5 file not found at path - {path_to_data['test']}")
+                return 
+            except KeyError as e:
+                print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
+                print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
+                return
+            # ------------------------------------------------------------------------------------------------
+
+
+        else:
+            print("\nWARNING: 'test' data path is missing for anomaly detection task. So, concatenating the 'train' and 'val' data for anomaly detection...")
+            # Concatenate the 'train' and 'val' Embeddings
+            test_embeddings = np.concatenate((train_embeddings, val_embeddings), axis=0)
+            # Concatenate the Labels 
+            test_labels = np.concatenate((train_labels, val_labels), axis=0)
+            # Concatenate the IDs 
+            test_ids = np.concatenate((train_ids, val_ids), axis=0)
         
-        run_anomaly_detection_task(train_embeddings, train_labels, train_ids, config)
+        run_anomaly_detection_task(test_embeddings, test_labels, test_ids, config)
     
     else:
         raise ValueError(f"\nTask type '{config.get('task')}' in config file is not supported. "

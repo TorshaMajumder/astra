@@ -106,6 +106,7 @@ def supervised_finetuning(config):
                     mjd=model_params["mjd"],
                     use_drop=model_params["use_drop"],
                     use_band_info=model_params["use_band_info"],
+                    time_scaling = model_params["time_scaling"],
                     projection_dim=model_params["projection_dim"] 
                 )
     print("\n --Model instantiated!")

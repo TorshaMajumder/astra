@@ -53,6 +53,7 @@ class AstraEmbedding(layers.Layer):
       # -----------------------------------------------------------------------
     # get the positional embeddings
     self.pos_encoding = self.build_positional_encoding() 
+    # self.pos_encoding = self.build_scaled_positional_encoding() 
     # add the dropout layer
     self.dropout = layers.Dropout(rate)
   

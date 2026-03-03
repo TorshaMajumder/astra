@@ -2,21 +2,26 @@
 
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
-task: anomaly_detection
-path_to_save: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/" # Where to save plots and reports
+task: classification
+path_to_save: "/home/nvidia/workplace/astra_storage/emb/run_20260217_201958/resampled_data_120K/pre-training/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
-mlflow_name: "20251231_140014_nvidia"
+mlflow_name: "20260217_201958_nvidia"
 mlflow_exp: "ASTRA(Downstream Tasks)"
 
 # --- Data Paths ---
 # Paths to the embeddings and labels from your pre-trained model
-# NOTE: training data is required for all downstream tasks. 
-#       Validation data is only needed for classification task.
+# NOTE: training data and validation data is required for classification task. 
+#       For anomaly detection task, only test data is required, else the training
+#       data and validation data will be concatenated and used for anomaly detection model.
+#       If you don't have separate test data for anomaly detection, you can comment out 
+#       the 'test' path and the code will automatically concatenate the 'train' and 'val' 
+#       data for anomaly detection.
 path_to_data: 
-  train: "/home/nvidia/workplace/dataset/all_dataset/finetune/test/embeddings.h5"
-  # val: "/home/nvidia/workplace/dataset/training_data/finetuning/val/embeddings.h5"
+  # test: "/home/nvidia/workplace/astra_storage/emb/all_dataset/finetuning/test/embeddings.h5"
+  train: "/home/nvidia/workplace/astra_storage/emb/run_20260217_201958/resampled_data_120K/pre-training/train/embeddings.h5"
+  val: "/home/nvidia/workplace/astra_storage/emb/run_20260217_201958/resampled_data_120K/pre-training/val/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:
@@ -27,8 +32,6 @@ classification_params:
   # List of classifier models to run. Can be 'lr' (Logistic Regression) , 'rf' (Random Forest), or 'mlp' (Multi-Layer Perceptron)
   models:
     - lr
-    - rf
-    - mlp
 
   # --- Hyperparameters for each model ---
   # These are passed directly to the scikit-learn constructors
@@ -65,5 +68,7 @@ anomaly_detection_params:
   
   # --- Hyperparameters for each model ---
   if_params:
+    n_trees: 10000
+    n_subsamples: 4096
     n_jobs: 30
     random_seed: 42

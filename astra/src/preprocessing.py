@@ -684,8 +684,8 @@ def create_inference_loader(source,
     """
     #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
-    glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    # glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
+    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
+    glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
     print(f"\nSearching for inference files using pattern: {glob_pattern}...")
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
     num_files_found = tf.data.experimental.cardinality(filenames_dataset)

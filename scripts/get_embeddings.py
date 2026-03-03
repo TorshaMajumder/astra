@@ -138,9 +138,12 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
         elif count > 5000:
             opacity = 0.65
             marker_size = 4.5
+        elif count > 1000:
+            opacity = 0.70
+            marker_size = 6.0
         else:
             opacity = 0.80
-            marker_size = 6.0
+            marker_size = 7.0
         # ------------------------------------------------------------------------------------------
         # ------------------------------- Create and Save the Plot ---------------------------------
         # ------------------------------------------------------------------------------------------
@@ -261,6 +264,7 @@ def contrastive_embeddings(config):
                     mjd=model_params["mjd"],
                     use_drop=model_params["use_drop"],
                     use_band_info=model_params["use_band_info"],
+                    time_scaling = model_params["time_scaling"],
                     projection_dim=model_params["projection_dim"] 
                 )
     print("\n --Model instantiated!")
@@ -415,7 +419,7 @@ def contrastive_embeddings(config):
     except Exception as e:
         print(f"\nERROR: Could not save the files. Check: {e}\n")
     # -------------------------------------------------------------------------------------------------
-    generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
+    # generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     # -------------------------------------------------------------------------------------------------
     
 def clustered_embeddings():

@@ -27,9 +27,9 @@ num_gpus: 8           # # of GPU instances to use for training. Set to 0 for CPU
 # --- Augmentation Parameters (Anchor, Hard Positive) ---
 #
 apply_white_noise: [True, True]   # Add white noise
-noise_levels : [0.05, 0.10]       # Noise level for each view
-apply_binning: [False, True]
-apply_outlier: [False, True]
+noise_levels : [0.06, 0.05]       # Noise level for each view
+apply_binning: [True, True]
+apply_outlier: [True, True]
 #
 # Sequence lengths for Anchor, Hard Positive
 #
@@ -37,7 +37,7 @@ maxlens:
   - {'g': 300, 'r': 350, 'i': 50}  # Anchor
   - {'g': 300, 'r': 350, 'i': 50}  # Hard Positive
 bin_widths: [5, 5]
-drop_rates: [0.0, 0.50]
+drop_rates: [0.05, 0.06]
 #
 # --- Transformer Model Parameters ---
 #
@@ -49,7 +49,8 @@ num_heads: 8           # Number of attention heads
 dff: 2048              # Feed-forward network dimension
 rate: 0.1              # Dropout rate
 use_band_info: True    # Use segment embeddings
-# time_scaling: 904.78   # Scaling factor for time indices in positional encoding (288 * np.pi)
+# NOTE: Only use when using scaled positional encoding. Else, set to 1.0. and ignore it.
+time_scaling: 1.0      # Scaling factor for time indices in scaled positional encoding (288 * np.pi)
 use_drop: True         # Use dropout
 projection_dim: 256    # Projection head dimension 
 #
