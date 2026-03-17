@@ -2,10 +2,10 @@
 #
 # --- Data set Paths ---
 #
-path_to_load: "/home/nvidia/workplace/dino_res/run_20260317_051433/"
-path_to_data: "/home/nvidia/workplace/dataset/test/val/"
-path_to_save: "/home/nvidia/workplace/dino_res/run_20260317_051433/val/"
-path_to_class_count: "/home/nvidia/workplace/dataset/test/val/data_stats.csv"
+path_to_load: "/home/nvidia/workplace/dino_res/run_20260317_073711/"
+path_to_data: "/home/nvidia/workplace/dataset/test/train/"
+path_to_save: "/home/nvidia/workplace/dino_res/run_20260317_073711/train/"
+path_to_class_count: "/home/nvidia/workplace/dataset/test/train/data_stats.csv"
 #
 # --- Inference parameters ---
 #
@@ -14,7 +14,7 @@ batch_size: 10       # per-GPU Batch size (adjust based on GPU memory)/ Just a b
 num_gpus: 1          # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
 global_view_maxlens: {'g': 250, 'r': 300, 'i': 50} # Using ANCHOR view sequence length, i.e., build_seg_len
 mlflow_upload: True  # Upload the UMAP embedding plot to MLflow?
-mlflow_name: "run_20260317_051433" # Set the name where you want to upload the plot
+mlflow_name: "run_20260317_073711" # Set the name where you want to upload the plot
 mlflow_exp: "ASTRA(Embeddings)"
 #
 # --- Required only when finetuning is True ---

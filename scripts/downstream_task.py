@@ -368,40 +368,40 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
         print(f"\nTest Accuracy: {accuracy * 100:.2f}%")
         print("\nClassification Report:\n", report)
         # ---------- Confusion Matrix ------------
-        # #
-        # # Define the order of classes for better visualization
-        # #
-        # class_order = ["AGN", "YSO", "SOLAR_LIKE", "S", "CV", "LPV", "DSCT|GDOR|SXPHE", "RR", "CEP", "ECL", "ELL", "RS"]
-        # #
-        # # Get the reordered indices based on the original label encoder classes
-        # #
-        # original_class_order = list(label_encoder.classes_)
-        # reorder_indices = [original_class_order.index(co) for co in class_order]
-        # #
-        # # Compute and reorder the confusion matrix
-        # #
-        # cm = confusion_matrix(val_label_encoded, y_pred)
-        # cm_perc = confusion_matrix(val_label_encoded, y_pred, normalize='true')
-        # cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
-        # cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
-        # # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
-        # labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
-        # labels = np.asarray(labels).reshape(cm_reordered.shape)
-        # # -------------------------------- Plots --------------------------
-        # fig, ax = plt.subplots(figsize=(12, 10))
-        # sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', vmin=0.0, vmax=1.0,
-        #             annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale', 'ticks': [0.0, 0.25, 0.5, 0.75, 1.0],'format': '%.1f'},
-        #             xticklabels=class_order, yticklabels=class_order)
-        # plt.xticks(rotation=45, ha='right', fontsize=10)
-        # plt.yticks(rotation=0, fontsize=10)
-        # ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
-        # ax.set_xlabel('Predicted Labels', fontsize=12, fontweight='bold')
-        # ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14, pad=20)
-        # # ------------------- Save the figure ----------------------
-        # output_filename = os.path.join(config["path_to_save"], f'confusion_matrix_{model_key}.png')
-        # plt.savefig(output_filename, dpi=300, bbox_inches='tight')
-        # print(f"\nConfusion matrix saved to: {output_filename} .")
-        # plt.close() 
+        #
+        # Define the order of classes for better visualization
+        #
+        class_order = ["AGN", "YSO", "SOLAR_LIKE", "S", "CV", "LPV", "DSCT|GDOR|SXPHE", "RR", "CEP", "ECL", "ELL", "RS"]
+        #
+        # Get the reordered indices based on the original label encoder classes
+        #
+        original_class_order = list(label_encoder.classes_)
+        reorder_indices = [original_class_order.index(co) for co in class_order]
+        #
+        # Compute and reorder the confusion matrix
+        #
+        cm = confusion_matrix(val_label_encoded, y_pred)
+        cm_perc = confusion_matrix(val_label_encoded, y_pred, normalize='true')
+        cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
+        cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
+        # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
+        labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
+        labels = np.asarray(labels).reshape(cm_reordered.shape)
+        # -------------------------------- Plots --------------------------
+        fig, ax = plt.subplots(figsize=(12, 10))
+        sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', vmin=0.0, vmax=1.0,
+                    annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale', 'ticks': [0.0, 0.25, 0.5, 0.75, 1.0],'format': '%.1f'},
+                    xticklabels=class_order, yticklabels=class_order)
+        plt.xticks(rotation=45, ha='right', fontsize=10)
+        plt.yticks(rotation=0, fontsize=10)
+        ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Predicted Labels', fontsize=12, fontweight='bold')
+        ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14, pad=20)
+        # ------------------- Save the figure ----------------------
+        output_filename = os.path.join(config["path_to_save"], f'confusion_matrix_{model_key}.png')
+        plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+        print(f"\nConfusion matrix saved to: {output_filename} .")
+        plt.close() 
         #
         #
         if config["mlflow_upload"]:

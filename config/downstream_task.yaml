@@ -3,11 +3,11 @@
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
 task: classification
-path_to_save: "/home/nvidia/workplace/dino_res/run_20260316_193723/" # Where to save plots and reports
+path_to_save: "/home/nvidia/workplace/dino_res/run_20260317_073711/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
-mlflow_name: "run_20260316_193723"
+mlflow_name: "run_20260317_073711"
 mlflow_exp: "ASTRA(Downstream Tasks)"
 
 # --- Data Paths ---
@@ -20,8 +20,8 @@ mlflow_exp: "ASTRA(Downstream Tasks)"
 #       data for anomaly detection.
 path_to_data: 
   # test: "/home/nvidia/workplace/astra_storage/emb/all_dataset/finetuning/test/embeddings.h5"
-  train: "/home/nvidia/workplace/dino_res/run_20260316_193723/train/embeddings.h5"
-  val: "/home/nvidia/workplace/dino_res/run_20260316_193723/val/embeddings.h5"
+  train: "/home/nvidia/workplace/dino_res/run_20260317_073711/train/embeddings.h5"
+  val: "/home/nvidia/workplace/dino_res/run_20260317_073711/val/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:

@@ -3,9 +3,9 @@
 # =========================================================
 import os
 import re
-import umap
+# import umap
 import h5py
-import mlflow
+# import mlflow
 import psutil
 import logging
 import argparse
@@ -13,17 +13,14 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm 
 import tensorflow as tf
-import plotly.express as px
-import plotly.graph_objects as go
+# import plotly.express as px
+# import plotly.graph_objects as go
 from astra.utils.helper import load_config
 from astra.src.finetuning import finetune_model
 from astra.src.transformer import AstraNet, AstraNet_Distil
 from astra.src.preprocessing import create_inference_loader
 from astra.utils.helper import load_hparams_from_event_file
 # ====================================================================
-# 1. CRITICAL: Clear the global Keras session so layer counters 
-#              (dense_1, dense_2) reset to zero and perfectly match 
-#              the state of your training script!
 # ====================================================================
 tf.keras.backend.clear_session()
 # ==========================================================
@@ -177,6 +174,7 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
     #
     # -------- Prepare Data for Plotting with Pandas and Plotly -------
     # 
+    directory_path = os.path.dirname(path_to_save)
     df = pd.DataFrame()
     df['id'] = ids
     df['label'] = labels_decoded
@@ -185,7 +183,7 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
     df['total_records'] = df['label'].map(class_to_count)
     df = df.sort_values('total_records', ascending=False)
     # Save as compressed parquet (gzip or snappy)
-    df.to_parquet('umap_embeddings.parquet', compression='gzip')
+    df.to_parquet(f"{os.path.join(directory_path, 'umap_embeddings.parquet')}", compression='gzip')
     print("\n -- Saved compressed pickle successfully!")
     # 
     # Define Unique Colors for all the classes
@@ -494,7 +492,7 @@ def contrastive_embeddings(config):
     except Exception as e:
         print(f"\nERROR: Could not save the files. Check: {e}\n")
     # -------------------------------------------------------------------------------------------------
-    generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
+    generate_plot(config['path_to_save'], config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     # -------------------------------------------------------------------------------------------------
     
 def k_distil_embeddings(config):

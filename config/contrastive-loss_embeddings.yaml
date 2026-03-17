@@ -3,8 +3,8 @@
 # --- Data set Paths ---
 #
 path_to_load: "/home/nvidia/workplace/contrastive_loss_res/run_20251231_140014/"
-path_to_data: "/home/nvidia/workplace/dataset/all_dataset/test/"
-path_to_save: "/home/nvidia/workplace/dataset/test/"
+path_to_data: "/home/nvidia/workplace/astra_storage/emb/run_20251231_140014/all_dataset/finetuning/test/embeddings.h5"
+path_to_save: "/home/nvidia/workplace/astra_storage/emb/run_20251231_140014/all_dataset/finetuning/test/embeddings.h5"
 path_to_class_count: "/home/nvidia/workplace/dataset/all_dataset/test/data_stats.csv"
 #
 # --- Inference parameters ---
