@@ -30,8 +30,8 @@ class AstraEmbedding(layers.Layer):
   -----------------------------------------------------------------------------------------------------------------
       tf.Tensor: Embedded time series data.
   """
-  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, name="astra_embedding", mjd=True, time_scaling=100):
-    super(AstraEmbedding, self).__init__()
+  def __init__(self, d_model, base=10000, rate=0.1, use_band_info=True, use_drop=False, name="astra_embedding", mjd=True, time_scaling=100, **kwargs):
+    super(AstraEmbedding, self).__init__(name=name, **kwargs)
 
     self.mjd = mjd
     self.base = base
@@ -40,22 +40,22 @@ class AstraEmbedding(layers.Layer):
     self.time_scaling = time_scaling
     self.use_band_info = use_band_info
     # Embed magnitude feature (linear)
-    self.seq_embedding = layers.Dense(d_model, name="sequence_embedding") 
+    self.seq_embedding = layers.Dense(d_model, name="seq_emb") 
     # if band information is used for embeddings
-    if self.use_band_info:
-      self.seg_embedding = tf.keras.Sequential([
-                                                tf.keras.layers.Dense(32, activation='relu'),
-                                                tf.keras.layers.Dense(d_model) 
-                                            ], name="segment_embedding")
-      # -----------------------------------------------------------------------
-      # Uncomment if you want to use a linear projection
-      # self.seg_embedding = layers.Dense(d_model, name="segment_embedding")
-      # -----------------------------------------------------------------------
+    # if self.use_band_info:
+    self.seg_embedding_nonlinear = tf.keras.Sequential([
+                                            tf.keras.layers.Dense(32, activation='relu', name="seg_emb_dense_1"),
+                                            tf.keras.layers.Dense(d_model, name="seg_emb_dense_2") 
+                                        ], name="segment_embedding_nonlinear")
+    # -----------------------------------------------------------------------
+    # Uncomment if you want to use a linear projection
+    # self.seg_embedding_linear = layers.Dense(d_model, name="segment_embedding_linear")
+    # -----------------------------------------------------------------------
     # get the positional embeddings
     self.pos_encoding = self.build_positional_encoding() 
-    # self.pos_encoding = self.build_scaled_positional_encoding() 
+    # self.scaled_pos_encoding = self.build_scaled_positional_encoding() 
     # add the dropout layer
-    self.dropout = layers.Dropout(rate)
+    self.dropout = layers.Dropout(rate, name="emb_drop_1")
   
   def build_scaled_positional_encoding(self):
     
@@ -167,10 +167,11 @@ class AstraEmbedding(layers.Layer):
 
     Parameters:
     --------------------------------------------------------------------------
-        mag (tf.Tensor): Magnitude values.
-        time (tf.Tensor): Time values.
-        band (tf.Tensor): Band information. Defaults to None. 
-                          Pass the band information if use_band_info is True.
+        x (dict): A dictionary containing the input data with keys:
+                    - 'input': Magnitude values. Shape: (batch_size, seq_len, 1)
+                    - 'times': Time values. Shape: (batch_size, seq_len, 1)
+                    - 'band_info': Band information. Shape: (batch_size, seq_len, 1) (optional, required if use_band_info is True)
+        training (bool): Whether the model is in training mode. Defaults to False.
 
     Returns:
     --------------------------------------------------------------------------
@@ -191,9 +192,10 @@ class AstraEmbedding(layers.Layer):
     # Get the segment embedding and add it to the embedding | Shape: (batch_size, seq_len, d_model)
     # 
     if self.use_band_info and x.get('band_info') is not None:
-      band_info = x['band_info']                      # Shape: (batch, seq_len, 1)
-      band_embeddings = self.seg_embedding(band_info)
-      emb += band_embeddings
+        
+        band_info = x['band_info']   # Shape: (batch, seq_len, 1)
+        band_embeddings = self.seg_embedding_nonlinear(band_info)                    
+        emb += band_embeddings
     #
     # Apply dropout
     #

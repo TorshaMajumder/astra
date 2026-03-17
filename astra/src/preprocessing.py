@@ -17,7 +17,42 @@ np.random.seed(1024)
 # ===========================================================
 
 @tf.function
-def get_multiview_crops_safe(current_serie, mask_serie, target_len, num_cols):
+def get_band_weights(last_index):
+    """
+    Calculates the number of detections per band to create sampling weights.
+    Returns the log-probabilities (for tf.random.categorical) and start/end indices for slicing.
+    """
+    # Calculate the start index for each band
+    start_indices = tf.concat([[0], last_index[:-1] + 1], axis=0)
+    # Number of detections per band
+    counts = (last_index + 1) - start_indices
+    counts = tf.cast(counts, tf.float32)
+    # Convert counts to log probabilities 
+    total_counts = tf.reduce_sum(counts)
+    probs = counts / (total_counts + 1e-9)
+    log_probs = tf.math.log(probs + 1e-9)
+    
+    return log_probs, start_indices
+
+@tf.function
+def get_single_band_view(sequence, mask, start_idx, end_idx, local_maxlen):
+    """
+    Slices a specific band from the sequence and applies the stochastic get_window.
+    """
+    num_cols = tf.shape(sequence)[1]
+    # Extract just the detections for this specific band
+    
+    band_seq = sequence[start_idx:end_idx]
+    band_mask = mask[start_idx:end_idx]
+    
+    # Pick a random sliding window 
+    lv_seq, lv_mask = get_window(band_seq, band_mask, local_maxlen, num_cols)
+    
+    return lv_seq, lv_mask
+
+
+@tf.function
+def get_multiview_crops(current_serie, mask_serie, target_len, num_cols):
     """
     Generates 3 views (Start, Mid, End) ONLY.
     """
@@ -70,7 +105,7 @@ def multiview_window(sequence, mask, last_index, bands_tensor, max_len_dict):
       mask: mask tensor
       last_index: a tensor of the indices of the last index of each band in the sequence
       bands_tensor: the bands in the sequence
-      max_len: The maximum length of each band sequence after sliding window
+      max_len_dict: The maximum length of each band sequence after sliding window
 
     Returns:
     --------------------------------------------------------------------------------------------
@@ -112,7 +147,7 @@ def multiview_window(sequence, mask, last_index, bands_tensor, max_len_dict):
             #
             # Extract the current band and Get 3 views to size "max_len"
             #
-            feats, masks = get_multiview_crops_safe(current_serie, current_mask, target_len, num_cols)
+            feats, masks = get_multiview_crops(current_serie, current_mask, target_len, num_cols)
             
         else:
             # Append zeros for features and ones for mask for the missing band
@@ -261,7 +296,7 @@ def binning(sequence, bin_width, drop_data):
   #
   # If binning is True then 0.0<drop_data<=1
   #
-  assert drop_data > 0.0 and drop_data <= 1.0 
+  # assert drop_data > 0.0 and drop_data <= 1.0 
   #
   # The light curve time span was divided into "bin_width" day long bins
   #
@@ -650,7 +685,7 @@ def contrastive_data_loader(source,
                                                 padding_values=final_padding_values,
                                                 drop_remainder=True  
                                               )
-    final_loader = final_loader.cache()
+    # final_loader = final_loader.cache()
     final_loader = final_loader.prefetch(buffer_size=AUTO)
     return final_loader
     
@@ -684,8 +719,8 @@ def create_inference_loader(source,
     """
     #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
-    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
+    glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
+    # glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
     print(f"\nSearching for inference files using pattern: {glob_pattern}...")
     filenames_dataset = tf.data.Dataset.list_files(glob_pattern, shuffle=shuffle, seed=seed)
     num_files_found = tf.data.experimental.cardinality(filenames_dataset)
@@ -758,4 +793,248 @@ def create_inference_loader(source,
 
 
 
+@tf.function
+def generate_multiview_crops(input_dict, maxlens, noise_level=None, apply_noise=False, 
+                                apply_binning=False, apply_outlier=False, bin_width=None, 
+                                drop_data=None):
+    
 
+
+    sequence = input_dict['input_id']
+    # Standardize
+    new_mag, _ = standardize(sequence[:, 1], sequence[:, 2])
+    sequence = tf.concat([sequence[:, 0:1], tf.reshape(new_mag, (-1, 1)), sequence[:, 2:]], axis=1)
+    mask = tf.zeros(tf.shape(new_mag), dtype=sequence.dtype)
+
+    # Pre-window Augmentations (Noise & Binning on full sequence)
+    if apply_noise:
+        noisy_mag = gaussian_noise(sequence[:, 1], noise_level)
+        sequence = tf.concat([sequence[:, 0:1], tf.reshape(noisy_mag, (-1, 1)), sequence[:, 2:]], axis=1)
+        
+    if apply_binning:
+        sequence, mask = binning(sequence, bin_width, drop_data)
+
+    # Apply Multi-View Window
+    # Returns final_features (3, seq_len, cols) and final_mask (3, seq_len)
+    final_features, final_mask = multiview_window(sequence, mask, input_dict['last_index'], input_dict['bands'], maxlens)
+
+    views_out = []
+    mag_limit = ztf_mag['limit']
+    mag_saturation = ztf_mag['saturation']
+
+    for i in range(3):
+        feat = final_features[i]
+        msk = final_mask[i]
+        
+        # Post-window Augmentations (Outlier)
+        if apply_outlier:
+            out_mag = photometric_outlier(feat[:, 1], msk, mag_limit, mag_saturation)
+            feat = tf.concat([feat[:, 0:1], tf.reshape(out_mag, (-1, 1)), feat[:, 2:]], axis=1)
+            
+        views_out.append({
+            'input': tf.expand_dims(feat[:, 1], axis=-1),
+            'times': tf.expand_dims(feat[:, 0], axis=-1),
+            'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+            'mask': msk
+        })
+        
+    return views_out
+
+
+@tf.function
+def generate_sliding_crop(input_dict, maxlens, noise_level=None, apply_noise=False, apply_binning=False, 
+                                apply_outlier=False, bin_width=None, drop_data=None):
+    
+    
+    sequence = input_dict['input_id']
+    
+    # Standardize
+    new_mag, _ = standardize(sequence[:, 1], sequence[:, 2])
+    sequence = tf.concat([sequence[:, 0:1], tf.reshape(new_mag, (-1, 1)), sequence[:, 2:]], axis=1)
+    mask = tf.zeros(tf.shape(new_mag), dtype=sequence.dtype)
+
+    # Pre-window Augmentations
+    if apply_noise:
+        noisy_mag = gaussian_noise(sequence[:, 1], noise_level)
+        sequence = tf.concat([sequence[:, 0:1], tf.reshape(noisy_mag, (-1, 1)), sequence[:, 2:]], axis=1)
+        
+    if apply_binning:
+        sequence, mask = binning(sequence, bin_width, drop_data)
+
+    # Apply Sliding Window
+    feat, msk = sliding_window(sequence, mask, input_dict['last_index'], input_dict['bands'], maxlens)
+
+    # Post-window Augmentations
+    if apply_outlier:
+        mag_limit = ztf_mag['limit']
+        mag_saturation = ztf_mag['saturation']
+        out_mag = photometric_outlier(feat[:, 1], msk, mag_limit, mag_saturation)
+        feat = tf.concat([feat[:, 0:1], tf.reshape(out_mag, (-1, 1)), feat[:, 2:]], axis=1)
+            
+    view_out = {
+        'input': tf.expand_dims(feat[:, 1], axis=-1),
+        'times': tf.expand_dims(feat[:, 0], axis=-1),
+        'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+        'mask': msk
+    }
+        
+    return [view_out]
+
+
+@tf.function
+def create_astra_distil_views(data, 
+                                gv_maxlens, 
+                                lv_maxlens_list, 
+                                num_local_views,
+                                apply_noise_list, 
+                                noise_levels_list, 
+                                apply_binning_list, 
+                                apply_outlier_list, 
+                                bin_widths_list, 
+                                drop_rates_list
+                            ):
+    
+    
+    input_dict = deserialize(data)
+    all_views =[]
+    # =====================================================================
+    # GENERATE GLOBAL VIEWS (Indices 0, 1, 2)
+    # We use the 0th index of the parameter lists for the Global Views batch
+    # =====================================================================
+    global_views = generate_multiview_crops(
+                                            input_dict, gv_maxlens, 
+                                            noise_levels_list[0], apply_noise_list[0], 
+                                            apply_binning_list[0], apply_outlier_list[0], 
+                                            bin_widths_list[0], drop_rates_list[0]
+                                        )
+    all_views.extend(global_views)
+    # =====================================================================
+    # GENERATE LOCAL VIEWS (Indices 3, 4, 5...)
+    # =====================================================================
+    if num_local_views > 0:
+        # First 3 Local Views are deterministic Start, Mid, End windows
+        # We use the 1st index of the parameter lists for these 3 views
+        # We use lv_maxlens_list[0] for their lengths
+        lv_deterministic = generate_multiview_crops(
+                                                    input_dict, lv_maxlens_list[0], 
+                                                    noise_levels_list[1], apply_noise_list[1], 
+                                                    apply_binning_list[1], apply_outlier_list[1], 
+                                                    bin_widths_list[1], drop_rates_list[1]
+                                                )
+        # Only take up to num_local_views if they asked for less than 3
+        all_views.extend(lv_deterministic[:num_local_views])
+        #
+        # Any remaining Local Views (>3) use sliding_window
+        #
+        remaining_lvs = num_local_views - 3
+        if remaining_lvs > 0:
+            for i in range(remaining_lvs):
+                # We shift indices to pull unique parameters for each sliding window
+                param_idx = i + 2 
+                len_idx = i + 1
+                
+                lv_stochastic = generate_sliding_crop(
+                                                        input_dict, lv_maxlens_list[len_idx], 
+                                                        noise_levels_list[param_idx], apply_noise_list[param_idx], 
+                                                        apply_binning_list[param_idx], apply_outlier_list[param_idx], 
+                                                        bin_widths_list[param_idx], drop_rates_list[param_idx]
+                                                    )
+                all_views.extend(lv_stochastic)
+
+    return tuple(all_views)
+
+
+
+def astra_distil_data_loader(source, 
+                                batch_size=100,
+                                buffer_size=10000, 
+                                seed=np.random.seed(1024),
+                                gv_maxlens=None, 
+                                lv_maxlens_list=None, 
+                                num_local_views=None,
+                                num_global_views=None,
+                                apply_noise_list=None, 
+                                noise_levels_list=None, 
+                                apply_binning_list=None, 
+                                apply_outlier_list=None,
+                                bin_widths_list=None, 
+                                drop_rates_list=None, 
+                                build_seq_len=None
+                            ):
+
+    #
+    # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
+    # glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
+    glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
+    print(f"\n\nSearching for TFRecord files using pattern: {glob_pattern}")
+    filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
+    # ----------------------------------------- Check if files were found -----------------------------------------------------
+    num_files_found = tf.data.experimental.cardinality(filenames)
+    if num_files_found == 0:
+        raise ValueError(f"\nNo TFRecord files found matching the pattern: {glob_pattern}\n"
+                         f"Please ensure the 'source' path ('{source}') is correct and files exist "
+                         f"in the expected 'CLASS/chunk_*.record' structure.")
+    elif num_files_found == tf.data.UNKNOWN_CARDINALITY:
+         print("\n\nWarning: Could not determine the exact number of files found (UNKNOWN_CARDINALITY). Proceeding anyway.")
+        
+    else:
+        print(f"\n\nFound {num_files_found} TFRecord files.")
+        # Optional: Print a few example filenames for verification
+        print("\n\nExample filenames:\n\n")
+        for f in filenames.take(1):
+            print(f"- {f.numpy().decode()}\n\n")
+    # --------------------------------------------- End File Discovery and Check ----------------------------------------------
+    #
+    # 
+    dataset = filenames.interleave(tf.data.TFRecordDataset, cycle_length=AUTO, num_parallel_calls=AUTO)
+    dataset = dataset.cache()
+    dataset = dataset.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
+    # 
+    aug_fn = lambda data: create_astra_distil_views(
+                                                data, 
+                                                gv_maxlens=gv_maxlens, 
+                                                lv_maxlens_list=lv_maxlens_list, 
+                                                num_local_views=num_local_views,
+                                                apply_noise_list=apply_noise_list, 
+                                                noise_levels_list=noise_levels_list, 
+                                                apply_binning_list=apply_binning_list, 
+                                                apply_outlier_list=apply_outlier_list, 
+                                                bin_widths_list=bin_widths_list, 
+                                                drop_rates_list=drop_rates_list
+                                            )
+    
+    dataset = dataset.map(aug_fn, num_parallel_calls=AUTO)
+    #
+    n_views = num_local_views + num_global_views 
+    # Define the padded shapes
+    # This is important for distributed/multi-GPU training to ensure consistent batch sizes
+    # Define the padded shapes for each view
+    view_shape = {
+                  'input': tf.TensorShape([build_seq_len, 1]),
+                  'times': tf.TensorShape([build_seq_len, 1]),
+                  'band_info': tf.TensorShape([build_seq_len, 1]),
+                  'mask': tf.TensorShape([build_seq_len])
+                }   
+    padded_view_shapes = (view_shape,) * n_views
+    # Define the padding values for each view
+    # In this work, mask should be 1.0 for padded positions
+    padded_view_values = {
+                            'input': tf.constant(0.0, dtype=tf.float32),
+                            'times': tf.constant(0.0, dtype=tf.float32),
+                            'band_info': tf.constant(0.0, dtype=tf.float32),
+                            'mask': tf.constant(1.0, dtype=tf.float32) 
+                        }
+    final_padding_values = (padded_view_values,) * n_views
+    # Use padded_batch
+    # This will take the variable-length outputs from .map()
+    # and pad them all to "build_seq_len"
+    final_loader = dataset.padded_batch(
+                                        batch_size=batch_size,
+                                        padded_shapes=padded_view_shapes,
+                                        padding_values=final_padding_values,
+                                        drop_remainder=True  
+                                        )
+    
+    final_loader = final_loader.prefetch(buffer_size=AUTO)
+    
+    return final_loader

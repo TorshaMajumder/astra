@@ -14,6 +14,7 @@ from astra.utils.helper import load_config
 from astra.src.classifier import mlp_classifier
 # from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
+# from sklearn.linear_model import LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -325,6 +326,15 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
         elif model_key == 'lr':
             print("\n-- Instantiating Logistic Regression classifier with params:", model_params)
             classifier = LogisticRegression(random_state=class_config['random_state'], **model_params)
+            # classifier = LogisticRegressionCV(
+            #                                     Cs=[0.01, 0.1, 1.0, 10.0, 100.0], 
+            #                                     cv=3, 
+            #                                     random_state=42, 
+            #                                     max_iter=2000, 
+            #                                     solver='lbfgs',
+                                                
+            #                                     n_jobs=-1  # Uses all CPU cores to run the tests in parallel
+            # )
             #
             # ------------------ Train Classifier ------------------
             print("\nTraining classifier...")
@@ -332,6 +342,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             #
             print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(X_test_scaled)
+            # print(f"Best C value found: {classifier.C_}")
             # ------------------------------------------------------
         elif model_key == 'mlp':
             print("\n-- Instantiating MLP classifier with params:", model_params)
@@ -357,40 +368,40 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
         print(f"\nTest Accuracy: {accuracy * 100:.2f}%")
         print("\nClassification Report:\n", report)
         # ---------- Confusion Matrix ------------
-        #
-        # Define the order of classes for better visualization
-        #
-        class_order = ["AGN", "YSO", "SOLAR_LIKE", "S", "CV", "LPV", "DSCT|GDOR|SXPHE", "RR", "CEP", "ECL", "ELL", "RS"]
-        #
-        # Get the reordered indices based on the original label encoder classes
-        #
-        original_class_order = list(label_encoder.classes_)
-        reorder_indices = [original_class_order.index(co) for co in class_order]
-        #
-        # Compute and reorder the confusion matrix
-        #
-        cm = confusion_matrix(val_label_encoded, y_pred)
-        cm_perc = confusion_matrix(val_label_encoded, y_pred, normalize='true')
-        cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
-        cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
-        # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
-        labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
-        labels = np.asarray(labels).reshape(cm_reordered.shape)
-        # -------------------------------- Plots --------------------------
-        fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', vmin=0.0, vmax=1.0,
-                    annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale', 'ticks': [0.0, 0.25, 0.5, 0.75, 1.0],'format': '%.1f'},
-                    xticklabels=class_order, yticklabels=class_order)
-        plt.xticks(rotation=45, ha='right', fontsize=10)
-        plt.yticks(rotation=0, fontsize=10)
-        ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
-        ax.set_xlabel('Predicted Labels', fontsize=12, fontweight='bold')
-        ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14, pad=20)
-        # ------------------- Save the figure ----------------------
-        output_filename = os.path.join(config["path_to_save"], f'confusion_matrix_{model_key}.png')
-        plt.savefig(output_filename, dpi=300, bbox_inches='tight')
-        print(f"\nConfusion matrix saved to: {output_filename} .")
-        plt.close() 
+        # #
+        # # Define the order of classes for better visualization
+        # #
+        # class_order = ["AGN", "YSO", "SOLAR_LIKE", "S", "CV", "LPV", "DSCT|GDOR|SXPHE", "RR", "CEP", "ECL", "ELL", "RS"]
+        # #
+        # # Get the reordered indices based on the original label encoder classes
+        # #
+        # original_class_order = list(label_encoder.classes_)
+        # reorder_indices = [original_class_order.index(co) for co in class_order]
+        # #
+        # # Compute and reorder the confusion matrix
+        # #
+        # cm = confusion_matrix(val_label_encoded, y_pred)
+        # cm_perc = confusion_matrix(val_label_encoded, y_pred, normalize='true')
+        # cm_reordered = cm[np.ix_(reorder_indices, reorder_indices)]
+        # cm_perc_reordered = cm_perc[np.ix_(reorder_indices, reorder_indices)]
+        # # ---------------- Create custom labels (e.g., "50 \n (85.2%)") -------------------
+        # labels = [f"{count}\n({perc:.1%})" for count, perc in zip(cm_reordered.flatten(), cm_perc_reordered.flatten())]
+        # labels = np.asarray(labels).reshape(cm_reordered.shape)
+        # # -------------------------------- Plots --------------------------
+        # fig, ax = plt.subplots(figsize=(12, 10))
+        # sns.heatmap(cm_perc_reordered, annot=labels, fmt="", cmap='YlGnBu', vmin=0.0, vmax=1.0,
+        #             annot_kws={"size": 8}, cbar_kws={'label': 'Purity Scale', 'ticks': [0.0, 0.25, 0.5, 0.75, 1.0],'format': '%.1f'},
+        #             xticklabels=class_order, yticklabels=class_order)
+        # plt.xticks(rotation=45, ha='right', fontsize=10)
+        # plt.yticks(rotation=0, fontsize=10)
+        # ax.set_ylabel('True Labels', fontsize=12, fontweight='bold')
+        # ax.set_xlabel('Predicted Labels', fontsize=12, fontweight='bold')
+        # ax.set_title(f'Confusion Matrix - {model_key.upper()} Classifier', fontsize=14, pad=20)
+        # # ------------------- Save the figure ----------------------
+        # output_filename = os.path.join(config["path_to_save"], f'confusion_matrix_{model_key}.png')
+        # plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+        # print(f"\nConfusion matrix saved to: {output_filename} .")
+        # plt.close() 
         #
         #
         if config["mlflow_upload"]:
@@ -412,7 +423,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
                 mlflow.log_text(report, f"reports/classification_report_{model_key}.txt")
                 print(f"\nLogged classification_report...")
                 # Log the confusion matrix plot as an ARTIFACT (figure)
-                mlflow.log_figure(fig, f"plots/confusion_matrix_{model_key}.png")
+                # mlflow.log_figure(fig, f"plots/confusion_matrix_{model_key}.png")
                 print("\nLogged confusion matrix...")
                 print("\nAll METRICS logged successfully!\n")  
             #
@@ -562,6 +573,15 @@ def main():
         print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
         print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
         return
+    # Calculate the variance of each feature column
+    variances = np.var(train_embeddings, axis=0)
+    feature_std = np.std(train_embeddings, axis=0)
+    print(f"Mean Variance across features: {np.mean(variances):.6f}")
+    print(f"Max Variance: {np.max(variances):.6f}")
+    print(f"Min Variance: {np.min(variances):.6f}")
+    print(f"Mean Std Dev across dimensions: {np.mean(feature_std):.6f}")
+    print(f"Number of dead dimensions (std < 1e-5): {np.sum(feature_std < 1e-5)}")
+
     # ------------------------------------------------------------------------------------------------
     # --- Execute the Correct Task Based on Config ---
     task_type = config.get('task', '').lower()

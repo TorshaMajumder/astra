@@ -2,8 +2,8 @@
 #
 # --- Data set Paths ---
 #
-path_to_read: "/home/nvidia/workplace/dataset/training_data/train/"
-path_to_val: "/home/nvidia/workplace/dataset/training_data/val/"
+path_to_read: "/home/nvidia/workplace/dataset/test/train/"
+path_to_val: "/home/nvidia/workplace/dataset/test/val/"
 path_to_save: "/home/nvidia/workplace/contrastive_loss_res/"
 #
 # --- Architecture ---
@@ -50,7 +50,7 @@ num_heads: 8           # Number of attention heads
 dff: 2048              # Feed-forward network dimension
 rate: 0.1              # Dropout rate
 use_band_info: True    # Use segment embeddings
-# time_scaling: 904.78   # Scaling factor for time indices in positional encoding (288 * np.pi)
+time_scaling: 904.78   # Scaling factor for time indices in positional encoding (288 * np.pi)
 use_drop: True         # Use dropout
 projection_dim: 256    # Projection head dimension 
 #
@@ -68,3 +68,6 @@ mlflow_upload: True
 mlflow_exp: "ASTRA(Pre-training)"
 
                       
+
+
+

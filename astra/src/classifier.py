@@ -27,18 +27,23 @@ def mlp_classifier(X_train, y_train, X_test, y_test, input_dim, num_classes, mlp
     ------------------------------------------------------------------------------------
         tuple: A tuple containing (history, test_accuracy, y_pred)
     """
+    hidden_layers = mlp_params.get('hidden_layers', None)
     # ----------------------------------------------------------------------------------
     # Define the Model Architecture
     # ----------------------------------------------------------------------------------
     model = Sequential()
     model.add(InputLayer(input_shape=(input_dim,)))
-    # Add hidden layers based on the config
-    for neurons in mlp_params['hidden_layers']:
-        model.add(Dense(neurons, activation='relu'))
-        model.add(Dropout(mlp_params['dropout_rate']))
-    # Add the final output layer
-    # Softmax for multi-class classification
-    model.add(Dense(num_classes, activation='softmax')) 
+    if hidden_layers is not None:
+        # Add hidden layers based on the config
+        for neurons in hidden_layers:
+            model.add(Dense(neurons, activation='relu'))
+            model.add(Dropout(mlp_params['dropout_rate']))
+        # Add the final output layer
+        # Softmax for multi-class classification
+        model.add(Dense(num_classes, activation='softmax')) 
+    else:
+        # If no hidden layers, directly connect input to output
+        model.add(Dense(num_classes, activation='softmax'))
     model.summary()
     # ----------------------------------------------------------------------------------
     # Compile the Model

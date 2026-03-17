@@ -71,8 +71,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 
 class AstraMultiHeadAttention(layers.Layer):
-    def __init__(self, d_model, num_heads):
-        super(AstraMultiHeadAttention, self).__init__()
+    def __init__(self, d_model, num_heads, name="astra_mha", **kwargs):
+        super(AstraMultiHeadAttention, self).__init__(name=name, **kwargs)
         
         self.num_heads = num_heads
         self.d_model = d_model
@@ -81,11 +81,11 @@ class AstraMultiHeadAttention(layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = layers.Dense(d_model)
-        self.wk = layers.Dense(d_model)
-        self.wv = layers.Dense(d_model)
+        self.wq = layers.Dense(d_model, name="mha_wq")
+        self.wk = layers.Dense(d_model, name="mha_wk")
+        self.wv = layers.Dense(d_model, name="mha_wv")
         # Final linear layer after attention
-        self.dense = layers.Dense(d_model) 
+        self.dense = layers.Dense(d_model, name="mha_dense_out") 
 
     def split_heads(self, x, batch_size):
         """
@@ -119,14 +119,14 @@ class AstraMultiHeadAttention(layers.Layer):
 def point_wise_feed_forward_network(d_model, dff):
     
     return tf.keras.Sequential([
-                                layers.Dense(dff, activation='relu'),
-                                layers.Dense(d_model)
+                                layers.Dense(dff, activation='relu', name="ffn_dense_1"),
+                                layers.Dense(d_model, name="ffn_dense_2")
                             ])
 
 
 class EncoderLayer(layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate=0.1, use_res=True, **kwargs):
-        super(EncoderLayer, self).__init__(**kwargs)
+    def __init__(self, d_model, num_heads, dff, rate=0.1, use_res=True, name="astra_enc_layer", **kwargs):
+        super(EncoderLayer, self).__init__(name=name, **kwargs)
         #
         # MLflow logging set : self.supports_masking = True
         self.supports_masking = True
@@ -137,13 +137,13 @@ class EncoderLayer(layers.Layer):
         
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-        self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm1 = layers.LayerNormalization(epsilon=1e-6, name="enc_layernorm_1")
+        self.layernorm2 = layers.LayerNormalization(epsilon=1e-6, name="enc_layernorm_2")
 
         self.use_res = use_res
 
-        self.dropout1 = layers.Dropout(rate)
-        self.dropout2 = layers.Dropout(rate)
+        self.dropout1 = layers.Dropout(rate, name="enc_drop_1")
+        self.dropout2 = layers.Dropout(rate, name="enc_drop_2")
 
 
 
@@ -166,7 +166,7 @@ class EncoderLayer(layers.Layer):
 
 
 class Encoder(layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1, use_res=True, name="encoder", **kwargs):
+    def __init__(self, num_layers, d_model, num_heads, dff, rate=0.1, use_res=True, name="astra_encoder", **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
         #
         # MLflow logging set : self.supports_masking = True
@@ -174,7 +174,7 @@ class Encoder(layers.Layer):
         
         self.d_model = d_model
         self.num_layers = num_layers
-        self.enc_layers = [EncoderLayer(d_model=d_model, num_heads=num_heads, dff=dff, rate=rate, use_res=use_res) for _ in range(num_layers)]
+        self.enc_layers = [EncoderLayer(d_model=d_model, num_heads=num_heads, dff=dff, rate=rate, use_res=use_res, name=f"encoder_layer_{i}") for i in range(num_layers)]
 
 
     

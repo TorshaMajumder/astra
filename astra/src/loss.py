@@ -107,3 +107,72 @@ def nt_xent_loss(*views, temperature):
 
 
 
+@tf.function
+def sinkhorn_knopp(logits, epsilon=0.05, iterations=3):
+    """
+    Computes the Sinkhorn-Knopp optimal transport assignment.
+    logits: Output of the SwAV prototype layer (batch_size, num_prototypes)
+    epsilon: Temperature parameter (usually 0.05 in SwAV)
+    iterations: Number of Sinkhorn updates (usually 3)
+    """
+    # 1. To prevent numerical overflow, subtract the max logit
+    # logits = logits - tf.reduce_max(logits, axis=1, keepdims=True)
+
+    # 2. Exponentiate and globally normalize
+    Q = tf.exp(logits / epsilon)
+    Q /= tf.reduce_sum(Q) 
+
+    # Extract dimensions as floats
+    K = tf.cast(tf.shape(Q)[1], tf.float32)
+    B = tf.cast(tf.shape(Q)[0], tf.float32)
+    
+    # 3. Sinkhorn iterations
+    for _ in range(iterations):
+        # Normalize columns (Prototypes) to 1/K
+        Q /= tf.reduce_sum(Q, axis=0, keepdims=True) 
+        Q /= K
+
+        # Normalize rows (Samples) to 1/B
+        Q /= tf.reduce_sum(Q, axis=1, keepdims=True) 
+        Q /= B
+
+    # 4. Scale back so the sum of rows equals 1 (Making them valid probability distributions)
+    Q *= B
+    
+    return Q
+
+
+@tf.function
+def swapped_xent_loss(target_codes, predicted_logits, temperature=0.1):
+    """
+    target_codes: Q matrix from Sinkhorn (computed from Global Views)
+    predicted_logits: Logits from Local (or other Global) Views
+    temperature: Temperature for softmax (usually 0.1)
+    """
+    # Log-softmax of the predictions
+    log_p = tf.nn.log_softmax(predicted_logits / temperature, axis=1)
+    
+    # Cross-entropy between Sinkhorn codes and log_p
+    # Note: tf.reduce_sum is used here instead of standard categorical_crossentropy
+    # because target_codes are soft, dense matrices, not one-hot labels.
+    loss = -tf.reduce_mean(tf.reduce_sum(target_codes * log_p, axis=1))
+    return loss
+
+
+@tf.function
+def distil_xent_loss(student_logits, teacher_logits, center, student_temp=0.1, teacher_temp=0.04):
+    """
+    student_logits: (Batch, K)
+    teacher_logits: (Batch, K)
+    center: (1, K) - The moving average center of the teacher
+    """
+    # Teacher probabilities (Centered and sharpened)
+    teacher_logits = tf.stop_gradient(teacher_logits)
+    teacher_probs = tf.nn.softmax((teacher_logits - center) / teacher_temp, axis=1)
+    
+    # Student log probabilities
+    student_logprobs = tf.nn.log_softmax(student_logits / student_temp, axis=1)
+    
+    # Cross Entropy
+    loss = -tf.reduce_sum(teacher_probs * student_logprobs, axis=1)
+    return tf.reduce_mean(loss)
