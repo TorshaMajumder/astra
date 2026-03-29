@@ -1,27 +1,15 @@
-# config file for generating embeddings
+# config file for finetuning
 #
 # --- Data set Paths ---
 #
+path_to_val: "/home/nvidia/workplace/dataset/resampled_data_120K/val/"
+path_to_save: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/"
+path_to_data: "/home/nvidia/workplace/dataset/training_data/train/"
 path_to_load: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/"
-path_to_data: "/home/nvidia/workplace/dataset/all_dataset/test/"
-path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/pre-training/test/"
-path_to_class_count: "/home/nvidia/workplace/dataset/all_dataset/test/data_stats.csv"
 #
-# --- Inference parameters ---
+# --- Finetuning parameters ---
 #
-finetune: False      # Flag to load best finetuned weights for generating embeddings
-batch_size: 10       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
-num_gpus: 1          # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
-global_view_maxlens: {'g': 250, 'r': 300, 'i': 50} # Using ANCHOR view sequence length, i.e., build_seg_len
-mlflow_upload: True  # Upload the UMAP embedding plot to MLflow?
-mlflow_name: "run_20260318_154848" # Set the name where you want to upload the plot
-mlflow_exp: "ASTRA(Embeddings)"
-#
-# --- Required only when finetuning is True ---
-unfreeze_layers: 2      # unfreeze the last 2 encoderLayers
-# --- Label Map for the dataset used for finetuning ---
-# --- Else can be ignored. --
-#
+# IMPORTANT: This must match the dataset's classes
 label_map: {
             'AGN': {
                     'count': 4000,
@@ -73,3 +61,12 @@ label_map: {
                     'id': 11
                 }
             }
+
+global_view_maxlens: {'g': 300, 'r': 350, 'i': 50}
+lr: 0.00001             # Use a very small learning rate
+batch_size: 128         # Adjust the batch_size for fine-tuning
+num_gpus: 1             # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
+epochs: 100             # Number of training epochs
+patience: 10            # Early stopping patience
+buffer_size: 50000      # Shuffle buffer size
+unfreeze_layers: 2      # unfreeze the last 2 encoderLayers

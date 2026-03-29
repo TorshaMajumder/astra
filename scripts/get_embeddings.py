@@ -115,7 +115,8 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
     MIN_DIST = 0.5   
     N_NEIGHBORS = 15                                      
     METRIC = 'cosine'               
-    RANDOM_STATE = 42    
+    RANDOM_STATE = 42  
+    INIT='pca'  
     #
     # --------------- Load the class counts from the CSV and sort them -----------------
     # the larger classes are at the TOP of the CSV so they are plotted FIRST (background)
@@ -167,7 +168,8 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
                         min_dist=MIN_DIST,
                         n_components=2,
                         metric=METRIC,
-                        random_state=RANDOM_STATE
+                        random_state=RANDOM_STATE,
+                        init=INIT
                     )
     embedding_2d = reducer.fit_transform(embeddings)
     print("\nUMAP reduction completed!")
@@ -236,7 +238,7 @@ def generate_plot(path_to_save, path_to_class_count, model_params, mlflow_upload
     # --------------------------------- Update Layout -------------------------------------------
     # -------------------------------------------------------------------------------------------
     fig.update_layout(
-                        title=f'2D-UMAP Projection of ASTRA Embeddings (d_model={model_params["d_model"]})',
+                        title=f'2D-UMAP Projection of ASTRA Embeddings',
                         xaxis_title='UMAP Dimension 1',
                         yaxis_title='UMAP Dimension 2',
                         legend_title_text='Classes with counts',
@@ -987,6 +989,277 @@ def finetuned_contrastive_embeddings(config):
     # -------------------------------------------------------------------------------------------------
     generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     # -------------------------------------------------------------------------------------------------
+
+def finetuned_k_distil_embeddings(config):
+    # ===============================================
+    # ------------- Device Strategy Setup -----------
+    #
+    # Detect available GPUs
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    #
+    # Use user-specified GPUs. Otherwise, use all available GPUs.
+    #
+    if config['num_gpus'] is not None and config['num_gpus'] > 0:
+        if config['num_gpus'] > len(gpus):
+            print(f"\nWarning: Requested {config['num_gpus']} GPUs, but only {len(gpus)} are available. Using all available.\n")
+            gpus_to_use = gpus
+        else:
+            gpus_to_use = gpus[:config['num_gpus']]
+        #
+        # Make only the selected GPUs visible to TensorFlow
+        #
+        tf.config.experimental.set_visible_devices(gpus_to_use, 'GPU')
+        print(f"\nUsing {len(gpus_to_use)} specified GPU(s).\n")
+    else:
+        # If no GPUs are found, run on CPU.
+        print("\nNo GPUs found. Running in CPU mode.\n")
+        physical_cores = psutil.cpu_count(logical=False)
+        logical_cores = psutil.cpu_count(logical=True)
+        print(f"\nAvailable CPU cores: Physical={physical_cores}, Logical={logical_cores}\n")
+        # Set the number of threads for intra-operation parallelism
+        num_intra_threads = 20
+        tf.config.threading.set_intra_op_parallelism_threads(num_intra_threads)
+        # Set the number of threads for inter-operation parallelism
+        num_inter_threads = 0 # Let TensorFlow decide
+        tf.config.threading.set_inter_op_parallelism_threads(num_inter_threads)
+    # ====================================================================================================
+    # ====================================================================================================
+    # Load the hyper-parameters of the model from the path
+    #
+    run_directory = config['path_to_load']
+    num_classes = len(config['label_map'])
+    model_params, _, _ = load_hparams_from_event_file(run_directory)
+    #
+    # Stop if hyperparameters could not be loaded
+    #
+    try:
+        if model_params is None:
+            raise ValueError("\n\nFailed to load hyperparameters from the event file.\nExiting...\n")
+    except Exception as e:
+        print(e)
+        return
+    strategy = tf.distribute.get_strategy()
+    with strategy.scope():
+        #
+        # --- Instantiate the Full Model using loaded hyper-params ---
+        #
+        print("\nRe-creating the full AstraNet architecture using loaded hyper-parameters...")
+    
+        teacher_model = AstraNet_Distil(
+                                                num_layers=model_params["num_layers"],
+                                                d_model=model_params["d_model"],
+                                                base=model_params["base"],
+                                                num_heads=model_params["num_heads"],
+                                                dff=model_params["dff"],
+                                                rate=model_params["rate"],
+                                                mjd=model_params["mjd"],
+                                                use_drop=model_params["use_drop"],
+                                                use_band_info=model_params["use_band_info"],
+                                                time_scaling=model_params["time_scaling"],
+                                                projection_out=model_params["projection_dim"],
+                                                name="teacher_model" 
+                                            )
+        print("\n --Model instantiated!")
+        #
+        # Building model with dummy input to create all variables
+        #
+        build_seq_len = sum(config['global_view_maxlens'].values()) 
+        num_views = 3
+        dummy_input = {
+            'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'mask': tf.zeros((1, build_seq_len, ), dtype=tf.float32)
+        }
+        #
+        # Set training=FALSE for inference
+        #
+        _ = teacher_model(dummy_input, training=False) # Builds Global path
+        print("\n --Full model built!")
+    # ====================================================================================================
+    # --- Isolate the ASTRA encoder to generate embeddings ---
+    # --- Add the GlobalAveragePooling layer after ASTRA encoder ----
+    # 
+    print("\n --Extracting ASTRA encoder for generating embeddings...")
+    #
+    # Define the two input dict with a fixed sequence length
+    # input layers for multi-view window inputs & single-view inputs for single-view window/sliding window
+    #
+    input_layer = {
+        'input': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='input', dtype=tf.float32),
+        'times': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='times', dtype=tf.float32),
+        'band_info': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='band_info', dtype=tf.float32),
+        'mask': tf.keras.Input(shape=(num_views, build_seq_len, 1), name='mask', dtype=tf.float32) 
+    }
+    # It should match build_seq_len
+    single_view_input = {
+        'input': tf.keras.Input(shape=(build_seq_len, 1), name='sv_input'),
+        'times': tf.keras.Input(shape=(build_seq_len, 1), name='sv_times'),
+        'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='sv_band_info'),
+        'mask': tf.keras.Input(shape=(build_seq_len,), name='sv_mask')
+    }
+    # ------------------------------------------------------------------------------------------------
+    #
+    # (STEP:1) Get the embeddings from the embedding layer 
+    # The embedding layer takes the full dictionary of inputs
+    #
+    embeddings = teacher_model.backbone.embedding_layer(single_view_input)
+    #
+    # Get the mask tensor from the input dictionary (IMPORTANT for encoder and pooling laye)
+    # 
+    mask_input = single_view_input['mask']
+    #
+    # (STEP:2) Get the embeddings and the attention weights
+    #
+    encoder_output, all_attention_weights = teacher_model.backbone.encoder(embeddings, mask=mask_input)
+    #
+    # (STEP:3) Invert the mask using ASTRA masking logic and get the pooled output
+    #
+    pool_mask = tf.keras.layers.Lambda(
+                                        lambda m: tf.logical_not(tf.cast(m, tf.bool))
+                                        )(mask_input)
+    pooled_output = teacher_model.backbone.pooling(encoder_output, mask=pool_mask)
+    #
+    # (STEP:4) Get the final ASTRA encoder model and Set to inference mode
+    #
+    single_view_encoder = tf.keras.Model(inputs=single_view_input, outputs=pooled_output, name="ASTRA_Encoder")
+    # =================================================================================================================
+    #
+    # --- (STEP:5) Process each view through the ASTRA encoder ---
+    #
+    view_embeddings = []
+    for i in range(num_views):
+        # Slice the i-th view from the main inputs
+        input_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'input_slice_{i}')(input_layer['input'])
+        times_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'times_slice_{i}')(input_layer['times'])
+        band_info_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i], name=f'band_info_slice_{i}')(input_layer['band_info'])
+        # Slice AND Reshape the Mask
+        mask_view_slice = tf.keras.layers.Lambda(lambda x: x[:, i, :, 0], name=f'mask_slice_{i}')(input_layer['mask'])
+        # Create the input dictionary for this single view
+        current_view_input_dict = {
+                                    'input': input_view_slice,
+                                    'times': times_view_slice,
+                                    'band_info': band_info_view_slice,
+                                    'mask': mask_view_slice # shape is (Batch, Seq_Len)
+                                }    
+        # Get the embedding for each view
+        view_embedding = single_view_encoder(current_view_input_dict)
+        view_embeddings.append(view_embedding)
+    # ----------------------------------------------------------------------------------------------------------
+    #
+    # --- (STEP:6) Aggregate the embeddings from all views by CONCATENATING ---
+    #
+    if len(view_embeddings) > 1:
+        # Concatenate along the last axis (the feature dimension)
+        # Input: A list of 4 tensors, each of shape (batch_size, 512)
+        # Output: A single tensor of shape (batch_size, 4 * 512) -> (batch_size, 2048)
+        aggregated_embedding = tf.keras.layers.Concatenate(axis=-1, name='aggregate_embeddings')(view_embeddings)
+    else:
+        aggregated_embedding = view_embeddings[0]
+    #
+    # (STEP:7) Create the supervised finetuned ASTRA model 
+    #
+    finetuned_model = finetune_model(encoder_model=single_view_encoder,
+                                        num_classes=num_classes,
+                                        final_inputs=input_layer,         
+                                        aggregated_embedding=aggregated_embedding,
+                                        unfreeze_layers=config['unfreeze_layers']
+                                )
+    print("\n -- Supervised Finetuned ASTRA model created successfully...!\n")
+    #
+    # Load model's weight
+    #
+    try:
+        path_to_weight = os.path.join(run_directory, 'best_finetuned_teacher_model_weights') 
+        print(f"\nSearching finetuned weights in: {path_to_weight}...")
+        finetuned_model.load_weights(path_to_weight)
+        print(f"\nWeights loaded successfully into the model!")
+    except Exception as e:
+        print(f"\nERROR: Could not load weights. Check the path to model's weight."
+                    f"Ensure architecture matches exactly.\n{e}")
+        return
+    # ====================================================================================================
+    # (STEP:8) Create the final embedding extractor from the finetuned model 
+    # ====================================================================================================
+    print("\n --Creating the final embedding extractor from the finetuned model...")
+    # Using the same 'input_layer' and the 'aggregated_embedding' tensor 
+    # we calculated before the head was added, we can create the final embedding model (encoder)
+    embedding_model = tf.keras.Model(inputs=input_layer, outputs=aggregated_embedding, name="Finetuned_Embedding_Extractor")
+    embedding_model.trainable = False 
+    #
+    print("\n --Final Embedding Extractor created successfully...!\n")
+    embedding_model.summary()
+    # =====================================================================================================   
+    # =====================================================================================================   
+    #
+    # ------------------ Prepare the Inference Data Loader -----------------------------------
+    # 
+    print("\nSetting up the inference data loader...")
+    inference_loader = create_inference_loader(
+                                                source=config['path_to_data'],
+                                                batch_size=config['batch_size'],
+                                                max_len=config['global_view_maxlens']
+                                            )
+
+    # ------------------------ Generate Finetuned ASTRA Embeddings ------------------------------------
+    print("\nGenerating embeddings for the dataset...\n")
+    # ------------------------- Get embedding dimension from the model --------------------------------
+    # NOTE: the embedding_model outputs the concatenated embeddings from all views unlike 
+    # the single_view_encoder model
+    #
+    num_views = 3  # Fixed number of views (start, mid, end)
+    flattened_embedding_dim = embedding_model.output.shape[-1]  # e.g., 512 * 3 = 1536
+    #
+    os.makedirs(config['path_to_save'], exist_ok=True)
+    h5_path = os.path.join(config['path_to_save'], 'embeddings.h5')
+    print(f"\nStreaming embeddings directly to HDF5 file: {h5_path} .")
+    #
+    # ------------------------- Create the HDF5 file and resizable datasets --------------------------
+    try:
+        with h5py.File(h5_path, 'w') as hf:
+            # 
+            string_dtype = h5py.string_dtype(encoding='utf-8')
+            dset_ids = hf.create_dataset('ids', (0,), maxshape=(None,), dtype='int64')
+            dset_labels = hf.create_dataset('labels', (0,), maxshape=(None,), dtype=string_dtype)
+            dset_embeddings = hf.create_dataset('embeddings', (0, flattened_embedding_dim), maxshape=(None, flattened_embedding_dim), dtype='float32')
+            #
+            num_rows_written = 0
+            #
+            # Iterate through the inference loader
+            #
+            for batch in tqdm(inference_loader, desc="Generating Finetuned Embeddings"):
+                #
+                model_inputs = {
+                                    'input': batch['input'],
+                                    'times': batch['times'],
+                                    'band_info': batch['band_info'],
+                                    'mask': batch['mask']
+                                }
+                curr_batch_size = tf.shape(batch['input'])[0]
+                # the embedding model directly processes the multi-view inputs 
+                # and outputs the concatenated embeddings
+                final_embeddings_batch = embedding_model(model_inputs, training=False)
+                # Resize the datasets on disk to make space for the new batch
+                dset_embeddings.resize((num_rows_written + curr_batch_size, flattened_embedding_dim))
+                dset_labels.resize((num_rows_written + curr_batch_size,))
+                dset_ids.resize((num_rows_written + curr_batch_size,))
+                # Write the new data into the newly created space
+                dset_embeddings[num_rows_written:] = final_embeddings_batch.numpy()
+                labels_as_bytes = batch['label'].numpy().astype(np.bytes_)
+                dset_labels[num_rows_written:] = labels_as_bytes
+                dset_ids[num_rows_written:] = batch['id'].numpy()
+                # Update the row counter
+                num_rows_written += curr_batch_size
+                
+
+        print(f"\n-- Generation Complete !")
+        print(f"\nSuccessfully wrote {num_rows_written} embeddings to {h5_path} .")
+    except Exception as e:
+        print(f"\nERROR: Could not save the files. Check: {e}\n")
+    # -------------------------------------------------------------------------------------------------
+    # generate_plot(h5_path, config['path_to_class_count'], model_params, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
+    # -------------------------------------------------------------------------------------------------
+    
     
 
 def main():
@@ -1021,9 +1294,10 @@ def main():
     
     elif args.loss == "k_distil":
         if config['finetune']:
-            pass
+            finetuned_k_distil_embeddings(config)
         else:
             k_distil_embeddings(config)
+            # generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
     
     else:
         print("\nError: Unsupported loss function specified. Use 'contrastive' or 'clustering'.\n")

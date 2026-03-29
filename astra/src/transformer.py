@@ -982,7 +982,7 @@ def k_distil_training(student,
                 pbar_train.set_postfix({'Train Loss': f'{current_train_loss.numpy():.4f}', 'LR': f'{current_lr:.1E}'})
 
                 # TensorBoard Step Logging
-                if summary_writer and step % 10 == 0: 
+                if summary_writer and step % 5 == 0: 
                     with summary_writer.as_default(step=optimizer.iterations):
                         tf.summary.scalar('loss/step_train', current_train_loss, description="Training loss per step")
                         tf.summary.scalar('learning_rate_step', current_lr, description="Learning rate per step")
@@ -1058,30 +1058,30 @@ def k_distil_training(student,
         # ==================================================================================
         # ---------------------- Checkpointing and Early Stopping based on Validation Loss -----------------------
         #
-        if epoch_val_loss < best_val_loss:
-            print(f"\n  -- Validation loss improved from {best_val_loss:.4f} to {epoch_val_loss:.4f}. Saving model...\n")
-            best_val_loss = epoch_val_loss
-            es_count = 0
+        # if epoch_val_loss < best_val_loss:
+        #     print(f"\n  -- Validation loss improved from {best_val_loss:.4f} to {epoch_val_loss:.4f}. Saving model...\n")
+        #     best_val_loss = epoch_val_loss
+        #     es_count = 0
             
-            if best_weights_path:
-                try:
-                    # Save the TEACHER model as the final output
-                    teacher.save_weights(best_weights_path, save_format='tf') 
-                    student.save_weights(best_student_wt_path, save_format='tf')
-                    print(f"\nTeacher weights saved successfully to {best_weights_path}.\n")
-                except Exception as e:
-                    print(f"\nError saving weights: {e}\n")
-        else:
-            if distributed_val_dataset and np.isfinite(epoch_val_loss):
-                es_count += 1
-                print(f"\n  -- Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
-            elif not distributed_val_dataset and np.isfinite(epoch_train_loss):
-                es_count += 1 
-                print(f"\n  -- Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
+        if best_weights_path:
+            try:
+                # Save the TEACHER model as the final output
+                teacher.save_weights(best_weights_path, save_format='tf') 
+                student.save_weights(best_student_wt_path, save_format='tf')
+                print(f"\nTeacher & Student weights (Epoch: {epoch}/{epochs}) saved successfully to {best_weights_path}.\n")
+            except Exception as e:
+                print(f"\nError saving weights: {e}\n")
+        # else:
+        #     if distributed_val_dataset and np.isfinite(epoch_val_loss):
+        #         es_count += 1
+        #         print(f"\n  -- Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
+        #     elif not distributed_val_dataset and np.isfinite(epoch_train_loss):
+        #         es_count += 1 
+        #         print(f"\n  -- Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
                 
-        if es_count >= patience:
-            print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
-            break       
+        # if es_count >= patience:
+        #     print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
+        #     break       
     #
     # ===================================================== END OF EPOCHS =======================================================
     #    
