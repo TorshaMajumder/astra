@@ -3,9 +3,9 @@
 # --- Data set Paths ---
 #
 path_to_val: "/home/nvidia/workplace/dataset/resampled_data_120K/val/"
-path_to_save: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/"
+path_to_save: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/student/"
 path_to_data: "/home/nvidia/workplace/dataset/training_data/train/"
-path_to_load: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/"
+path_to_load: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/student/"
 #
 # --- Finetuning parameters ---
 #

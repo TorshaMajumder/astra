@@ -2,8 +2,8 @@
 
 # --- General Task Configuration ---
 # Task can be 'classification' or 'anomaly_detection'
-task: classification
-path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/student/pre-training/" # Where to save plots and reports
+task: anomaly_detection
+path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/finetuned/test/" # Where to save plots and reports
 
 # --- Mlflow Configuration -----
 mlflow_upload: True
@@ -19,9 +19,9 @@ mlflow_exp: "ASTRA(Downstream Tasks)"
 #       the 'test' path and the code will automatically concatenate the 'train' and 'val' 
 #       data for anomaly detection.
 path_to_data: 
-  # test: "/home/nvidia/workplace/astra_storage/emb/all_dataset/finetuning/test/embeddings.h5"
-  train: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/student/pre-training/train/embeddings.h5"
-  val: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/student/pre-training/val/embeddings.h5"
+  test: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/finetuned/test/embeddings.h5"
+  # train: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/finetuned/train/embeddings.h5"
+  # val: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/finetuned/val/embeddings.h5"
 
 # --- Classification Task Parameters ---
 classification_params:

@@ -3,9 +3,9 @@
 # =========================================================
 import os
 import re
-# import umap
+import umap
 import h5py
-# import mlflow
+import mlflow
 import psutil
 import logging
 import argparse
@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm 
 import tensorflow as tf
-# import plotly.express as px
-# import plotly.graph_objects as go
+import plotly.express as px
+import plotly.graph_objects as go
 from astra.utils.helper import load_config
 from astra.src.finetuning import finetune_model
 from astra.src.transformer import AstraNet, AstraNet_Distil
@@ -1198,7 +1198,7 @@ def finetuned_k_distil_embeddings(config):
     inference_loader = create_inference_loader(
                                                 source=config['path_to_data'],
                                                 batch_size=config['batch_size'],
-                                                max_len=config['global_view_maxlens']
+                                                maxlen=config['global_view_maxlens']
                                             )
 
     # ------------------------ Generate Finetuned ASTRA Embeddings ------------------------------------
@@ -1294,7 +1294,8 @@ def main():
     
     elif args.loss == "k_distil":
         if config['finetune']:
-            finetuned_k_distil_embeddings(config)
+            # finetuned_k_distil_embeddings(config)
+            generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
         else:
             k_distil_embeddings(config)
             # generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])

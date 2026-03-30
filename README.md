@@ -61,7 +61,7 @@ astra-downstream --config ../config/downstream_task.yaml
 ```
 ## Perform Supervised Finetuning for ASTRA framework
 ```
-astra-finetuning --config ../config/contrastive-loss_finetuning.yaml 
+astra-finetuning --loss contrastive --config ../config/contrastive-loss_finetuning.yaml 
 ```
 ## For more help!
 ```

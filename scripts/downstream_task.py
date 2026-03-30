@@ -12,7 +12,7 @@ from sklearn.utils import resample
 from collections import defaultdict
 from astra.utils.helper import load_config
 from astra.src.classifier import mlp_classifier
-# from coniferest.isoforest import IsolationForest
+from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
 # from sklearn.linear_model import LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
@@ -573,14 +573,14 @@ def main():
         print(f"\nError: Dataset '{e.args[0]}' not found in the HDF5 file.")
         print("Please ensure the file contains 'embeddings', 'labels', and 'ids' datasets.")
         return
-    # Calculate the variance of each feature column
-    variances = np.var(train_embeddings, axis=0)
-    feature_std = np.std(train_embeddings, axis=0)
-    print(f"Mean Variance across features: {np.mean(variances):.6f}")
-    print(f"Max Variance: {np.max(variances):.6f}")
-    print(f"Min Variance: {np.min(variances):.6f}")
-    print(f"Mean Std Dev across dimensions: {np.mean(feature_std):.6f}")
-    print(f"Number of dead dimensions (std < 1e-5): {np.sum(feature_std < 1e-5)}")
+    # # Calculate the variance of each feature column
+    # variances = np.var(train_embeddings, axis=0)
+    # feature_std = np.std(train_embeddings, axis=0)
+    # print(f"Mean Variance across features: {np.mean(variances):.6f}")
+    # print(f"Max Variance: {np.max(variances):.6f}")
+    # print(f"Min Variance: {np.min(variances):.6f}")
+    # print(f"Mean Std Dev across dimensions: {np.mean(feature_std):.6f}")
+    # print(f"Number of dead dimensions (std < 1e-5): {np.sum(feature_std < 1e-5)}")
 
     # ------------------------------------------------------------------------------------------------
     # --- Execute the Correct Task Based on Config ---

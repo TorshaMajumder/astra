@@ -402,7 +402,7 @@ def k_distil_finetuning(config):
     # Load model's weight
     #
     try:      
-        path_to_weight = os.path.join(run_directory, 'best_distil_teacher_weights') 
+        path_to_weight = os.path.join(run_directory, 'best_weight') 
         print(f"\nSearching pre-trained weights in: {path_to_weight}...")
         teacher_model.load_weights(path_to_weight)
         print(f"\nWeights loaded successfully into the model!")
@@ -541,7 +541,7 @@ def k_distil_finetuning(config):
                         )
     #
     # ---------------- Applying callbacks for saving the best model and early stopping -----------------
-    checkpoint_path = os.path.join(finetune_dir, "best_finetuned_teacher_model_weights")
+    checkpoint_path = os.path.join(finetune_dir, "best_finetuned_student_model_weights")
     
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
                                                                 filepath=checkpoint_path,
