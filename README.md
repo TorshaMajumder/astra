@@ -10,17 +10,11 @@
   </tr>
 </table>
 
-
-***
-
 **ASTRA** is a self-supervised learning (SSL) framework designed to extract robust representation vectors from photometric time-series data. 
 
 Our pre-training pipeline utilizes multi-filter light curves from the Zwicky Transient Facility (ZTF; [Bellm et al., 2019](https://ui.adsabs.harvard.edu/abs/2019PASP..131a8002B/abstract)) [Zubercal DR16](http://atua.caltech.edu/ZTF/Zubercal.html) catalog, prepared through a systematic cross-matching workflow against the [Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) variability catalog.
 
 The framework currently features **Astra-CLR** (our contrastive learning implementation) and is architected to seamlessly support knowledge distillation models in upcoming releases.
-
-***
-
 
 ---
 
@@ -30,9 +24,9 @@ To facilitate development, deployment, and research reproducibility, the ASTRA p
 | Repository | Description | Link |
 | :--- | :--- | :--- |
 | **Development Code** | Core framework, data pipeline, and model training (This Repo). | *[Current Repository]* |
-| **Inference Code** | Lightweight, production-ready inference scripts and utilities. | [GitHub: astra-inference](https://github.com/your-username/astra-inference) *(Replace Link)* |
-| **Astronomy Dataset** | Light curve datasets formatted for ASTRA, introduced here for the first time. | [Hugging Face: Dataset](https://huggingface.co/datasets/your-username/astra-dataset) *(Replace Link)* |
-| **Model Weights & ONNX** | Pre-trained & finetuned model checkpoints along with ONNX exports. | [Hugging Face: Models](https://huggingface.co/models/your-username/astra-models) *(Replace Link)* |
+| **Inference Code** | Lightweight, production-ready inference scripts and utilities. | [GitHub: astra-inference](https://github.com/snad-space/astra-infer) |
+| **Astronomy Dataset** | Light curve datasets formatted for ASTRA, introduced here for the first time. | [Hugging Face: Dataset](https://huggingface.co/datasets/snad-space/astra-zubercaldr16_gaiadr3vclassre) |
+| **Model Weights & ONNX** | Pre-trained & finetuned model checkpoints along with ONNX exports. | [Hugging Face: Models](https://huggingface.co/ashrot/astra-clr-base) |
 
 ---
 
@@ -44,7 +38,7 @@ git clone https://github.com/TorshaMajumder/astra.git
 cd astra
 ```
 
-### MLflow Logging Setup *(Optional)*
+#### MLflow Logging Setup *(Optional)*
 If you require experiment tracking with MLflow, install these additional dependencies:
 ```bash
 pip install mlflow
@@ -58,13 +52,13 @@ pip install pyarrow==22.0.0
 This phase prepares your astronomical catalogs by cross-matching the Gaia DR3 variability catalogs, PS1 DR2, and Zubercal DR16, and storing them in [HATS](https://hats.readthedocs.io) format. These HATS-formatted directories will subsequently be processed into Tensor Records for model training.
 
 ### Workflow
-Please run the notebooks in the following order:
+Please run the notebooks under the directory [notebooks/hats/](notebooks/hats/) in the following order:
 
 1. **`import-vizier.ipynb`** — Downloads and converts the source catalogs from VizieR into HATS format.
 2. **`zubercal-x-gaia-vars.ipynb`** — Cross-matches the Zubercal DR16 catalog with the Gaia variable star catalog.
 
 ### Loading Examples
-Notebooks prefixed with `_` demonstrate how to load the resulting HATS catalogs for validation or manual inspection:
+Notebooks inside [notebooks/hats/](notebooks/hats/) prefixed with `_` demonstrate how to load the resulting HATS catalogs for validation or manual inspection:
 
 * `_load-with-lsdb.ipynb` — Loading using [LSDB](https://docs.lsdb.io)
 * `_load-with-nested-pandas.ipynb` — Loading using [nested-pandas](https://nested-pandas.readthedocs.io)
