@@ -2,7 +2,7 @@
 <table>
   <tr>
     <td width="100">
-      <img src="figures/assets/logo.png" width="100" height="100" alt="ASTRA Logo">
+      <img src="figures/assets/logo.png" width="150" height="150" alt="ASTRA Logo">
     </td>
     <td>
       <h1>ASTRA: Attention-based Self-supervised Time-series Representation Architecture</h1>
