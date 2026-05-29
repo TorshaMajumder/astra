@@ -187,13 +187,3 @@ astra-finetuning --help
 
 ***
 
-## 🤝 Acknowledgments
-
-We gratefully acknowledge the support and resources provided by the following organizations:
-* **NVIDIA** — For hardware support and GPU computing resources (NVIDIA A100).
-* **[Funding Body / Grant Name]** — [Placeholder].
-* **[Institution / Department]** — [Placeholder].
-* **[Institution / Department]** — [Placeholder].
- 
-*** 
-
