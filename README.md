@@ -10,7 +10,7 @@
   </tr>
 </table> -->
 
-<img src="figures/assets/astra_logo_black.png" width="150" height="140" align="left" alt="ASTRA Logo">
+<img src="figures/assets/astra_logo_black.png" width="80" height="80" align="left" alt="ASTRA Logo">
 
 ### ASTRA: <sup><sub><b>A</b><sub>ttention-based</sub> <b>S</b><sub>elf-supervised</sub> <b>T</b><sub>ime-series</sub> <b>R</b><sub>epresentation</sub> <b>A</b><sub>rchitecture</sub></sub></sup>
 
