@@ -58,7 +58,7 @@ Please run the notebooks under the directory [notebooks/hats/](notebooks/hats/) 
 2. **`zubercal-x-gaia-vars.ipynb`** — Cross-matches the Zubercal DR16 catalog with the Gaia variable star catalog.
 
 ### Loading Examples
-Notebooks inside [notebooks/hats/](notebooks/hats/) prefixed with `_` demonstrate how to load the resulting HATS catalogs for validation or manual inspection:
+Notebooks inside the directory [notebooks/hats/](notebooks/hats/), prefixed with `_` demonstrate how to load the resulting HATS catalogs for validation or manual inspection:
 
 * `_load-with-lsdb.ipynb` — Loading using [LSDB](https://docs.lsdb.io)
 * `_load-with-nested-pandas.ipynb` — Loading using [nested-pandas](https://nested-pandas.readthedocs.io)
@@ -80,9 +80,9 @@ pip install -r data-requirements.txt
 ```
 
 ### Run Data Generation (`astra-data`)
-The `astra-data` tool processes your prepared HATS catalogs into TFRecord chunks. Use the arguments below depending on your dataset structure.
+The `astra-data` tool processes your prepared HATS catalogs into TFRecord chunks, optimizing data throughput and enabling highly efficient data ingestion for the training framework. 
 
-* **Case A: Dataset contains a "Class" column for labels**
+* **Case A: Dataset contains a "Class" column to extract object label**
   ```bash
   astra-data --dest ../dataset/lyrae/ --path_to_buff ../dataset/lyrae/hats/zubercal_vrrlyr --min_detec 200 --train_size 0.80 --max_lcs_per_chunk 200
   ```
@@ -105,7 +105,7 @@ The `astra-data` tool processes your prepared HATS catalogs into TFRecord chunks
 ---
 
 ## 3. Model Training & Pre-training
-ASTRA-NET utilizes distributed training. This phase requires a separate virtual environment to manage dependencies like TensorFlow and Keras.
+**Astra-CLR** utilizes distributed training. This phase requires a separate virtual environment to manage dependencies like TensorFlow and Keras.
 
 ### Set up the Training Environment
 ```bash
@@ -118,15 +118,13 @@ pip install -e .
 pip install -r train-requirements.txt 
 ```
 
-### Run Model Training (`astra-net`)
-You can train models using contrastive representation learning (Astra-CLR) or prepare for knowledge distillation workflows.
+### Run Model Training
+Train representation learning models using the **Astra-CLR** contrastive learning framework. Please note that knowledge distillation workflows are not supported in the current release and will be integrated in a future update.
 
 ```bash
 # Pre-training with Contrastive Loss (Astra-CLR)
-astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --num_gpus 0 --epoch 100 --batch_size 300
-
-# Pre-training with Knowledge Distillation (Future Framework Support)
-astra-net --loss k_distil --config ../config/k_distil.yaml --num_gpus 0 --epoch 100 --batch_size 300
+# Note: --batch_size is defined per-replica (per-GPU)
+astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --num_gpus 8 --epoch 200 --batch_size 78
 ```
 
 ---
@@ -148,18 +146,21 @@ Generate representation embeddings for further statistical analysis or visual pl
 # For Contrastive Loss framework (Run on 'astra-clr' branch)
 astra-embeddings --loss contrastive --config ../config/contrastive-loss_embeddings.yaml --batch_size 500 
 
-# For Knowledge Distillation framework (Run on 'main' branch once released)
-astra-embeddings --loss k_distil --config ../config/k_distil-loss_embeddings.yaml --batch_size 500 
 ```
 
 ### Perform Downstream Tasks (`astra-downstream`)
-Assess the quality of the learned representations on downstream astronomical classification or regression tasks:
+Evaluate the quality of the learned representation vectors on downstream astronomical tasks. The framework currently supports:
+
+* **Classification:** Evaluated via linear probing and weighted k-NN classification.
+* **Anomaly Detection:** Evaluated via outlier detection using Isolation Forests.
+
 ```bash
 astra-downstream --config ../config/downstream_task.yaml 
 ```
 
-### Perform Supervised Finetuning (`astra-finetuning`)
-Fine-tune the pre-trained weights end-to-end using labeled light curve data:
+### Perform Top-Layer Finetuning (`astra-finetuning`)
+Evaluate model performance in low-data regimes by dynamically sampling just 2% of the labeled dataset. This pipeline performs partial top-layer fine-tuning utilizing a Multi-View Late Fusion mechanism---introducing this multi-view fusion architecture to astronomical time-series analysis.
+
 ```bash
 astra-finetuning --loss contrastive --config ../config/contrastive-loss_finetuning.yaml 
 ```
