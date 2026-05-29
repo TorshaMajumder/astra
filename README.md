@@ -1,14 +1,20 @@
 ***
-<table>
+<!-- <table>
   <tr>
     <td width="150">
-      <img src="figures/assets/astra_logo_black.png" width="150" height="150" alt="ASTRA Logo">
+      <img src="figures/assets/astra_logo_black.png" width="150" height="120" alt="ASTRA Logo">
     </td>
     <td>
-      <h1>ASTRA:<sup><sub>— <b>A</b>ttention-based <b>S</b>elf-supervised <b>T</b>ime-series <b>R</b>epresentation <b>A</b>rchitecture</sub></sup></h1>
+      <h1>ASTRA:<sup><sub><b>A</b>ttention-based <b>S</b>elf-supervised <b>T</b>ime-series <b>R</b>epresentation <b>A</b>rchitecture</sub></sup></h1>
     </td>
   </tr>
-</table>
+</table> -->
+
+<img src="figures/assets/astra_logo_black.png" width="150" height="140" align="left" alt="ASTRA Logo">
+
+### ASTRA: <sup><sub><b>A</b><sub>ttention-based</sub> <b>S</b><sub>elf-supervised</sub> <b>T</b><sub>ime-series</sub> <b>R</b><sub>epresentation</sub> <b>A</b><sub>rchitecture</sub></sub></sup>
+
+<br clear="left"/>
 
 ASTRA is a self-supervised learning (SSL) framework designed for astronomy time-series data, specifically optimized for light curve analysis. By leveraging attention-based representation learning, ASTRA enables pre-training on unlabelled astronomical datasets to extract meaningful physical representations, which can then be fine-tuned for downstream classification and analysis tasks.
 
