@@ -9,14 +9,18 @@
     </td>
   </tr>
 </table>
+<p align="left">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python Version">
+  <img src="https://img.shields.io/badge/Framework-TensorFlow%202.15-FF6F00?logo=tensorflow&logoColor=white" alt="TensorFlow Version">
+  <img src="https://img.shields.io/badge/Hardware-NVIDIA%20A100-76B900?logo=nvidia&logoColor=white" alt="Hardware Version">
+</p>
 
 **ASTRA** is a self-supervised learning (SSL) framework designed for photometric time-series analysis. At its core, the framework utilizes **AstraNet**--an encoder model based on the original Transformer architecture--to extract robust representation vectors from raw light curves.
  
 
 Our pre-training pipeline utilizes multi-filter light curves from the Zwicky Transient Facility (ZTF; [Bellm et al., 2019](https://ui.adsabs.harvard.edu/abs/2019PASP..131a8002B/abstract)) [Zubercal DR16](http://atua.caltech.edu/ZTF/Zubercal.html) catalog, prepared through a systematic cross-matching workflow against the [Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) variability catalog.
 
-Currently featuring **Astra-CLR** (our contrastive learning implementation), the framework also evaluates representations using a label-efficient, partial top-layer fine-tuning powered by a **Multi-View Late Fusion** mechanism. **ASTRA** is architected to seamlessly support knowledge distillation models in upcoming releases.
-
+Currently featuring **Astra-CLR** (our contrastive learning implementation), the framework also evaluates representations using a label-efficient, partial top-layer fine-tuning powered by a **Multi-View Late Fusion** mechanism. **ASTRA** is architected to seamlessly support knowledge distillation models in upcoming releases. 🚀
 ---
 
 ## 🌐 The ASTRA Ecosystem
@@ -160,7 +164,7 @@ astra-downstream --config ../config/downstream_task.yaml
 ```
 
 ### Perform Top-Layer Finetuning (`astra-finetuning`)
-Evaluate model performance in low-data regimes by dynamically sampling just *2%* of the labeled dataset. This pipeline performs partial top-layer fine-tuning utilizing a **Multi-View Late Fusion mechanism**--introducing this multi-view fusion architecture to astronomical time-series analysis.
+Evaluate model performance in low-data regimes by dynamically sampling just **2%** of the labeled dataset. This pipeline performs partial top-layer fine-tuning utilizing a **Multi-View Late Fusion mechanism**--introducing this multi-view fusion architecture to astronomical time-series analysis.
 
 ```bash
 astra-finetuning --loss contrastive --config ../config/contrastive-loss_finetuning.yaml 
