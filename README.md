@@ -11,9 +11,16 @@
 </table>
 
 
-ASTRA is a self-supervised learning (SSL) framework designed for astronomy time-series data, specifically optimized for light curve analysis. By leveraging attention-based representation learning, ASTRA enables pre-training on unlabelled astronomical datasets to extract meaningful physical representations, which can then be fine-tuned for downstream classification and analysis tasks.
+***
 
-The framework currently supports **Astra-CLR** (our contrastive learning implementation) and is designed to support knowledge distillation models in future releases.
+**ASTRA** is a self-supervised learning (SSL) framework designed to extract robust representation vectors from photometric time-series data. 
+
+Our pre-training pipeline utilizes multi-filter light curves from the Zwicky Transient Facility (ZTF; [Bellm et al., 2019](https://ui.adsabs.harvard.edu/abs/2019PASP..131a8002B/abstract)) [Zubercal DR16](http://atua.caltech.edu/ZTF/Zubercal.html) catalog, prepared through a systematic cross-matching workflow against the [Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) variability catalog.
+
+The framework currently features **Astra-CLR** (our contrastive learning implementation) and is architected to seamlessly support knowledge distillation models in upcoming releases.
+
+***
+
 
 ---
 
