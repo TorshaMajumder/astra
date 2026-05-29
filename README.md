@@ -1,7 +1,7 @@
 ***
 <table>
   <tr>
-    <td width="100">
+    <td width="150">
       <img src="figures/assets/logo.png" width="150" height="150" alt="ASTRA Logo">
     </td>
     <td>
