@@ -1,10 +1,14 @@
 ***
-
-# ASTRA: Attention-based Self-supervised Time-series Representation Architecture
-
-<p align="center">
-  <img src="figures/assets/logo.png" width="350" height="350" alt="ASTRA Logo">
-</p>
+<table>
+  <tr>
+    <td width="100">
+      <img src="figures/assets/logo.png" width="100" height="100" alt="ASTRA Logo">
+    </td>
+    <td>
+      <h1>ASTRA: Attention-based Self-supervised Time-series Representation Architecture</h1>
+    </td>
+  </tr>
+</table>
 
 ASTRA is a self-supervised learning (SSL) framework designed for astronomy time-series data, specifically optimized for light curve analysis. By leveraging attention-based representation learning, ASTRA enables pre-training on unlabelled astronomical datasets to extract meaningful physical representations, which can then be fine-tuned for downstream classification and analysis tasks.
 
