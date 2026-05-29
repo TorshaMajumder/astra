@@ -5,8 +5,7 @@
       <img src="figures/assets/logo.png" width="150" height="150" alt="ASTRA Logo">
     </td>
     <td>
-      <h1>ASTRA</h1>
-        <p><b>A</b>ttention-based <b>S</b>elf-supervised <b>T</b>ime-series <b>R</b>epresentation <b>A</b>rchitecture</p>
+      <h1>ASTRA <sup><sub>— <b>A</b>ttention-based <b>S</b>elf-supervised <b>T</b>ime-series <b>R</b>epresentation <b>A</b>rchitecture</sub></sup></h1>
     </td>
   </tr>
 </table>
