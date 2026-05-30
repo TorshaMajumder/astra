@@ -31,7 +31,7 @@ To facilitate development, deployment, and research reproducibility, the ASTRA p
 | Repository | Description | Link |
 | :--- | :--- | :--- |
 | **Development Code** | Core framework, data pipeline, and model training (This Repo). | *[Current Repository]* |
-| **Inference Code** | Lightweight, production-ready inference scripts and utilities. | [GitHub: astra-inference](https://github.com/snad-space/astra-infer) |
+| **Inference Code** | Lightweight, production-ready inference scripts and utilities. | [GitHub: astra-infer](https://github.com/snad-space/astra-infer) |
 | **Astronomy Dataset** | Light curve datasets formatted for ASTRA, introduced here for the first time. | [Hugging Face: Dataset](https://huggingface.co/datasets/snad-space/astra-zubercaldr16_gaiadr3vclassre) |
 | **Model Weights & ONNX** | Pre-trained & finetuned model checkpoints along with ONNX exports. | [Hugging Face: Models](https://huggingface.co/ashrot/astra-clr-base) |
 
