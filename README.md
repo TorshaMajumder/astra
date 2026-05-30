@@ -20,7 +20,7 @@
 
 Our pre-training pipeline utilizes multi-filter light curves from the Zwicky Transient Facility (ZTF; [Bellm et al., 2019](https://ui.adsabs.harvard.edu/abs/2019PASP..131a8002B/abstract)) [Zubercal DR16](http://atua.caltech.edu/ZTF/Zubercal.html) catalog, prepared through a systematic cross-matching workflow against the [Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3) variability catalog.
 
-Currently featuring **Astra-CLR** (our contrastive learning implementation), the framework also evaluates representations using a label-efficient, partial top-layer fine-tuning powered by a **Multi-View Late Fusion** mechanism. **ASTRA** is architected to seamlessly support knowledge distillation models in upcoming releases. 🚀
+Currently featuring **Astra-CLR** (our contrastive learning implementation), the framework also evaluates representations using a label-efficient, partial top-layer fine-tuning powered by a **Multi-View Late Fusion** mechanism. **ASTRA** is architected to seamlessly support other non-contrastive learning models in upcoming releases. 🚀
 
 
 ---
