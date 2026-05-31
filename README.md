@@ -138,9 +138,9 @@ astra-net --loss contrastive --config ../config/contrastive-loss_triplet.yaml --
 
 ## 4. Post-Training & Evaluation Workflows
 
-⚠️ **Branch Note:** The main development branch holds the latest updates, including the upcoming knowledge distillation architecture. Because architectural changes in the distillation model modify the core codebase, downstream evaluations and fine-tuning for the contrastive learning framework must be executed from the dedicated `astra-clr` branch. 
+⚠️ **Branch Note:** The main development branch holds the latest code updates. For downstream evaluations and fine-tuning for the contrastive learning framework using the model weights shared at [Hugging Face: Models](https://huggingface.co/ashrot/astra-clr-base), you must execute the code from the dedicated `astra-clr` branch. 
 
-Before running downstream tasks or contrastive model fine-tuning, please switch to the correct branch:
+Please switch to the correct branch, else skip this step:
 ```bash
 git checkout astra-clr
 ```
@@ -185,5 +185,7 @@ astra-downstream --help
 astra-finetuning --help
 ```
 
-***
+---
+
+
 
