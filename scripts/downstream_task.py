@@ -7,17 +7,18 @@ import mlflow
 import argparse
 import numpy as np
 import seaborn as sns
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
 from collections import defaultdict
 from astra.utils.helper import load_config
 from astra.src.classifier import mlp_classifier
-from coniferest.isoforest import IsolationForest
+# from coniferest.isoforest import IsolationForest
 from sklearn.linear_model import LogisticRegression
 # from sklearn.linear_model import LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler, LabelEncoder, normalize
+from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 # ==========================================================
 os.system('clear')
 # ===========================================================
@@ -91,45 +92,26 @@ def sample_embeddings(embeddings, labels, ids, sampling_config, random_state=Non
 
     return sampled_embeddings, sampled_labels, sampled_ids
 
-def save_bootstrap_results(results, output_filepath, classifier_type, n_iterations):
-    """
-    Formats and saves the aggregated bootstrap results to a text file.
 
-    Parameters:
-    -------------------------------------------------------------------------------------
-        results (dict): The dictionary of aggregated results from the bootstrap function
-        output_filepath (str): The full path where the text file will be saved
-        classifier_type (str): The type of classifier used (e.g., 'lr', 'rf')
-        n_iterations (int): The number of bootstrap iterations performed
-    """
-    #
-    #  Ensure the directory exists before trying to write the file
-    #
-    output_dir = os.path.dirname(output_filepath)
-    os.makedirs(output_dir, exist_ok=True)
-    #
-    with open(output_filepath, 'w') as f:
-        f.write("--- Bootstrap Evaluation Results ---\n\n")
-        f.write(f"Classifier Type: {classifier_type.upper()}\n")
-        f.write(f"Number of Iterations: {n_iterations}\n")
-        f.write("="*40 + "\n\n")
-        # Write Overall Accuracy
-        f.write("Overall Accuracy:\n")
-        f.write(f"  - Mean: {results['accuracy_mean']:.4f}\n")
-        f.write(f"  - Standard Deviation: {results['accuracy_std']:.4f}\n\n")
-        # Write Per-Class F1-Scores
-        f.write("Per-Class F1-Scores:\n")
-        # Sort the labels for consistent output order
-        sorted_labels = sorted(results['f1_scores'].keys())
-        for label in sorted_labels:
-            metrics = results['f1_scores'][label]
-            f.write(f"  - Class '{label}':\n")
-            f.write(f"    - Mean: {metrics['mean']:.4f}\n")
-            f.write(f"    - Standard Deviation: {metrics['std']:.4f}\n")
-        
-        f.write("\n--- End of Report ---\n")
+def save_bootstrap_results(aggregated, output_filepath, model_key, n_iterations):
+    os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
     
-    print(f"\nBootstrap results successfully saved to: {output_filepath}\n")
+    with open(output_filepath, 'w') as f:
+        f.write(f"--- Bootstrap Results: {model_key.upper()} ---\n")
+        f.write(f"Iterations: {n_iterations}\n\n")
+        
+        for m in ['accuracy', 'micro_f1', 'macro_f1']:
+            f.write(f"{m.replace('_', ' ').title()}:\n")
+            f.write(f"  Mean: {aggregated[m]['mean']:.4f}\n")
+            f.write(f"  Std:  {aggregated[m]['std']:.4f}\n\n")
+        
+        f.write("Per-Class F1-Scores:\n")
+        for m, stats in aggregated.items():
+            if m.startswith('f1_cls_'):
+                cls_name = m.replace('f1_cls_', '')
+                f.write(f"  Class {cls_name}: {stats['mean']:.4f} ± {stats['std']:.4f}\n")
+                
+    print(f"Report saved to {output_filepath}")
 
 
 def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config):
@@ -151,7 +133,13 @@ def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids,
     # load the Classification parameters 
     #
     class_config = config['classification_params']
+    n_iter = class_config.get('n_iterations', 10)
+    path_to_save = config.get('path_to_save', './results')
     unique_labels = sorted(np.unique(val_labels))
+    # =============================================================================
+    # ------------- Preprocessing the embeddings to extract the mean --------------
+    train_embeddings = train_embeddings.reshape(-1, 3, 512).mean(axis=1)
+    val_embeddings = val_embeddings.reshape(-1, 3, 512).mean(axis=1)
     # =============================================================================
     # 
     # Encode string labels to integers
@@ -160,9 +148,13 @@ def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids,
     label_encoder = LabelEncoder()
     train_label_encoded = label_encoder.fit_transform(train_labels)
     val_label_encoded = label_encoder.transform(val_labels)
+    num_classes = len(label_encoder.classes_)
+    # =============================================================================
+    # Metrics storage
+    all_model_results = {}
+    # =============================================================================
     
-    print(f"---   Found {len(np.unique(train_label_encoded))} classes in training set and {len(np.unique(val_label_encoded))} \
-          classes in validation set.")
+    print(f"---   Found {len(np.unique(train_label_encoded))} classes in training set and {len(np.unique(val_label_encoded))} classes in validation set.")
     # --------------------------------------------------------------------------------------------
     #
     # ------------------- Loop through and evaluate each specified model ----------------------
@@ -171,97 +163,99 @@ def run_bootstrap_classification_task(train_embeddings, train_labels, train_ids,
         #
         # Store metrics from each iteration
         #
-        accuracies = []
-        f1_scores_per_class = defaultdict(list)
+        metrics = defaultdict(list)
         #
         model_key = model_key.lower()
         model_params = class_config.get(f'{model_key}_params', {})
         print(f"\n{'='*20} Starting Bootstrap Evaluation ({class_config['n_iterations']} iterations) for {model_key.upper()} {'='*20}")
         #
-        # ----------------------------- Instantiate Classifier --------------------------------
-        #
-        if model_key == 'rf':
-            print("\n-- Instantiating Random Forest classifier with params:", model_params)
-            classifier = RandomForestClassifier(random_state=class_config['random_state'], **model_params)
-        elif model_key == 'lr':
-            print("\n-- Instantiating Logistic Regression classifier with params:", model_params)
-            classifier = LogisticRegression(random_state=class_config['random_state'], **model_params)
-        else:
-            print(f"\nWarning: Classifier type '{model_key}' not recognized. Skipping...")
-            continue
-        #
-        for i in range(class_config['n_iterations']):
-            #
+        for i in tqdm(range(n_iter), desc=f"Evaluating {model_key}"):
+            # --------------------------------------------------------------------------------------------
             # RESAMPLE WITH REPLACEMENT of the same size as the original dataset
             boot_embeddings, boot_labels = resample(train_embeddings, train_label_encoded, random_state=i)
-            if model_key == 'rf':
-                #
-                # ------------------ Train and Evaluate ------------------
-                classifier.fit(boot_embeddings, boot_labels)
-                y_pred = classifier.predict(val_embeddings)
-                #
+            # --------------------------------------------------------------------------------------------
+            if model_key == 'knn':
+                boot_embeddings = normalize(boot_embeddings, norm='l2', axis=1)
+                val_embeddings = normalize(val_embeddings, norm='l2', axis=1)
+                y_pred = weighted_knn(
+                                        boot_embeddings, boot_labels, val_embeddings, 
+                                        k=model_params.get('k', 20), 
+                                        temperature=model_params.get('temperature', 0.07),
+                                        num_classes=num_classes,
+                                        batch_size=model_params.get('batches', 1000)
+                                    )
             elif model_key == 'lr':
-                # -------------- Standardize the Embeddings --------------
-                #
                 scaler = StandardScaler()
                 X_train_scaled = scaler.fit_transform(boot_embeddings)
                 X_test_scaled = scaler.transform(val_embeddings)
-            #
-                # ------------------ Train and Evaluate ------------------
-                classifier.fit(X_train_scaled, boot_labels)
-                #
-                y_pred = classifier.predict(X_test_scaled)
-                # ------------------------------------------------------
-            # Save metrices
-            accuracies.append(accuracy_score(val_label_encoded, y_pred))
-            # Use output_dict=True to get a structured report
-            report = classification_report(val_label_encoded, y_pred, labels=unique_labels, output_dict=True, zero_division=0)
-            for label in unique_labels:
-                # Safely access the f1-score for each class
-                f1_scores_per_class[str(label)].append(report[str(label)]['f1-score'])
+                clf = LogisticRegression(random_state=i, **model_params)
+                clf.fit(X_train_scaled, boot_labels)
+                y_pred = clf.predict(X_test_scaled)
+            
+            elif model_key == 'rf':
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(boot_embeddings)
+                X_test_scaled = scaler.transform(val_embeddings)
+                clf = RandomForestClassifier(random_state=i, **model_params)
+                clf.fit(X_train_scaled, boot_labels)
+                y_pred = clf.predict(X_test_scaled)
+                # --------------------------------------------------------------------------------------------
+            # 
+            metrics['accuracy'].append(accuracy_score(val_label_encoded, y_pred))
+            metrics['macro_f1'].append(f1_score(val_label_encoded, y_pred, average='macro'))
+            metrics['micro_f1'].append(f1_score(val_label_encoded, y_pred, average='micro'))
+            # 
+            report = classification_report(val_label_encoded, y_pred, output_dict=True, zero_division=0)
+            for cls_idx in range(num_classes):
+                label_str = str(cls_idx)
+                if label_str in report:
+                    metrics[f'f1_cls_{label_encoder.classes_[cls_idx]}'].append(report[label_str]['f1-score'])
+            
             # ------------------------------------------------------------------------
             # Optional: Print progress
-            if (i + 1) % 10 == 0:
+            if (i + 1) % 5 == 0:
                 print(f"   : Completed iteration {i+1}/{class_config['n_iterations']}")
         # ----------------------------------------------------------------------------  
         # Aggregate Results
         #
-        results = {
-                    'accuracy_mean': np.mean(accuracies),
-                    'accuracy_std': np.std(accuracies),
-                    'f1_scores': {}
-                }
-        for label in unique_labels:
-            scores = f1_scores_per_class[str(label)]
-            results['f1_scores'][str(label)] = {
-                                                'mean': np.mean(scores),
-                                                'std': np.std(scores)
-                                            }
-        output_path = os.path.join(config['path_to_save'], f"{model_key}_bootstrap_report.txt")                          
-        save_bootstrap_results(results, output_path, model_key, class_config['n_iterations'])  
-        print(f"\n-- Results:\n\n",results)
-        #
-        #------------------------------------------------------------------------------------------------
-        if config["mlflow_upload"]:
-            # ==========================================================================================
-            # (IMPORTANT): Remove MLflow logging before packaging
-            #
-            # Initialize MLflow Tracking
-            # Set an URI and Experiment name for MLflow
-            #
-            mlflow.set_tracking_uri("http://localhost:8000")
-            mlflow.set_experiment(f'{config["mlflow_exp"]}')
-            print(f"\n{'='*20} Logging to MLflow {'='*20}")
-            # ===============================================
-            with mlflow.start_run(run_name=f"{config['mlflow_name']}") as run:
-                #
-                # Save the object ids and labels as txt file in artifacts/
-                #
-                mlflow.log_artifact(local_path=output_path, artifact_path="reports")
-                print("\nBootstrapped metrices are logged successfully!\n")  
-            #
-            #
-            # ==================================== END OF LOGGING =======================================
+        aggregated = {m: {'mean': np.mean(v), 'std': np.std(v)} for m, v in metrics.items()}
+        all_model_results[model_key] = aggregated
+        
+        output_path = os.path.join(path_to_save, f"{model_key}_bootstrap_report.txt")
+        save_bootstrap_results(aggregated, output_path, model_key, n_iter)
+        
+        
+
+def weighted_knn(train_embeddings, train_labels, val_embeddings, k, temperature, num_classes, batch_size=1000):
+    
+    all_predictions = []
+    
+    for i in range(0, len(val_embeddings), batch_size):
+        val_batch = val_embeddings[i : i + batch_size]
+        # Find cosine similarity 
+        sim_matrix = np.matmul(val_batch, train_embeddings.T)
+        # Get Top K neighbors
+        # Partition to get top K indices (unsorted)
+        topk_idx_unsorted = np.argpartition(-sim_matrix, kth=k-1, axis=1)[:, :k]
+        # Extract sims to sort them properly
+        topk_sims_unsorted = np.take_along_axis(sim_matrix, topk_idx_unsorted, axis=1)
+        # Sort the top K
+        sort_order = np.argsort(-topk_sims_unsorted, axis=1)
+        topk_idx = np.take_along_axis(topk_idx_unsorted, sort_order, axis=1)
+        topk_sims = np.take_along_axis(topk_sims_unsorted, sort_order, axis=1)
+        # Calculate Weights
+        weights = np.exp(topk_sims / temperature)
+        # Vectorized Weighted Voting
+        # Get classes of neighbors: shape (batch_size, k)
+        neighbor_classes = train_labels[topk_idx]
+        # Create a score buffer: (batch_size, num_classes)
+        class_scores = np.zeros((len(val_batch), num_classes))
+        rows = np.arange(len(val_batch))[:, np.newaxis]
+        np.add.at(class_scores, (rows, neighbor_classes), weights)
+        all_predictions.append(np.argmax(class_scores, axis=1))
+        
+    return np.concatenate(all_predictions)
+
 
 
 
@@ -291,7 +285,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
     label_encoder = LabelEncoder()
     train_label_encoded = label_encoder.fit_transform(train_labels)
     val_label_encoded = label_encoder.transform(val_labels)
-    
+    num_classes = len(label_encoder.classes_)
     print(f"\n---   Found {len(np.unique(train_label_encoded))} classes in training set and {len(np.unique(val_label_encoded))} classes in validation set.")
     # --------------------------------------------------------------------------------------------
     print("\n-------------------------- Running Supervised Classification Task ---------------------------")
@@ -323,6 +317,18 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(val_embeddings)
             # ------------------------------------------------------
+        elif model_key == 'knn':
+                train_embeddings_ = normalize(train_embeddings, norm='l2', axis=1)
+                val_embeddings_ = normalize(val_embeddings, norm='l2', axis=1)
+                y_pred = weighted_knn(
+                                        train_embeddings_, 
+                                        train_label_encoded, 
+                                        val_embeddings_, 
+                                        k=model_params.get('k', 20), 
+                                        temperature=model_params.get('temperature', 0.07),
+                                        num_classes=num_classes,
+                                        batch_size=model_params.get('batches', 1000)
+                                    )
         elif model_key == 'lr':
             print("\n-- Instantiating Logistic Regression classifier with params:", model_params)
             classifier = LogisticRegression(random_state=class_config['random_state'], **model_params)
@@ -333,7 +339,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             #                                     max_iter=2000, 
             #                                     solver='lbfgs',
                                                 
-            #                                     n_jobs=-1  # Uses all CPU cores to run the tests in parallel
+            #                                     n_jobs=20  # Uses all CPU cores to run the tests in parallel
             # )
             #
             # ------------------ Train Classifier ------------------
@@ -343,6 +349,7 @@ def run_classification_task(train_embeddings, train_labels, train_ids, val_embed
             print("\nEvaluating on the held-out validation data...")
             y_pred = classifier.predict(X_test_scaled)
             # print(f"Best C value found: {classifier.C_}")
+            # return
             # ------------------------------------------------------
         elif model_key == 'mlp':
             print("\n-- Instantiating MLP classifier with params:", model_params)
@@ -581,7 +588,6 @@ def main():
     # print(f"Min Variance: {np.min(variances):.6f}")
     # print(f"Mean Std Dev across dimensions: {np.mean(feature_std):.6f}")
     # print(f"Number of dead dimensions (std < 1e-5): {np.sum(feature_std < 1e-5)}")
-
     # ------------------------------------------------------------------------------------------------
     # --- Execute the Correct Task Based on Config ---
     task_type = config.get('task', '').lower()
@@ -592,6 +598,7 @@ def main():
             run_bootstrap_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
         else:
             run_classification_task(train_embeddings, train_labels, train_ids, val_embeddings, val_labels, val_ids, config)
+            # knn_evaluation(train_embeddings, train_labels, val_embeddings, val_labels, k=20, temperature=0.07)
     
     elif task_type == 'anomaly_detection':
         if path_to_data.get('test'):
