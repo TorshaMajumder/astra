@@ -126,8 +126,7 @@ pip install -r train-requirements.txt
 ```
 
 ### Run Model Training
-Train representation learning models using the **Astra-CLR** contrastive learning framework. Please note that knowledge distillation workflows are not supported in the current release and will be integrated in a future update.
-
+Train representation learning models using the **Astra-CLR** contrastive learning framework. 
 ```bash
 # Pre-training with Contrastive Loss (Astra-CLR)
 # Note: --batch_size is defined per-replica (per-GPU)
