@@ -109,7 +109,7 @@ def analyze_duplicates(source_dir):
     # Adjust the search pattern. 
     # Default is - source_dir + "/partition_0/CEP/chunk_0_0.record"
     #
-    search_pattern = os.path.join(source_dir, '*', '*')
+    search_pattern = os.path.join(source_dir, '*')
     class_dirs = [d for d in glob.glob(search_pattern) if os.path.isdir(d)]
     print(f"\nFound {len(class_dirs)} tf.record files to process...\n")
     if not class_dirs:
@@ -337,24 +337,24 @@ if __name__ == '__main__':
     #
     # Define parameters for "duplicate_analysis" & "resampling"
     # 
-    source_dir = '/home/nvidia/workplace/dataset/all_dataset/test/'
-    target_dir = '/home/nvidia/workplace/dataset/training_data/resampled_data_120K/'
+    source_dir = '/media3/majumder/ablation_data_astra-distil/val/'
+    target_dir = '/media3/majumder/ablation_data_astra-distil/val/'
     split_ratios = (0.8, 0.2)  # 80% train, 20% validation, 100% test
-    max_lcs_per_chunk = 300   
-    oversample = True  # Set to True to enable oversampling when needed
+    max_lcs_per_chunk = 200   
+    oversample = False  # Set to True to enable oversampling when needed
     config = {
-                "AGN": 2000,
-                "CEP": 2000,
-                "DSCT|GDOR|SXPHE": 2000,
-                "RR": 2000,
-                "ECL": 2000,
-                "ELL": 2000,
-                "LPV": 2000,
-                "RS": 2000,
-                "CV": 2000,
-                "S": 2000,
-                "SOLAR_LIKE": 2000,
-                "YSO": 2000
+                "AGN": 3957,
+                "CEP": 20,
+                "DSCT|GDOR|SXPHE": 2846,
+                "RR": 406,
+                "ECL": 5380,
+                "ELL": 53,
+                "LPV": 902,
+                "RS": 2735,
+                "CV": 22,
+                "S": 1625,
+                "SOLAR_LIKE": 8006,
+                "YSO": 298
             }
     main(mode, source_dir, target_dir, split_ratios, max_lcs_per_chunk, config, oversample)
     

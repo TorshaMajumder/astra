@@ -472,16 +472,16 @@ def augmentation(data,
                  drop_data=0.50,
                  for_inference=False
                 ):
-  '''
-  Augments the input data with various photometric transformations.
-  Convention: The original Transformer paper and most implementations follow this convention:
+    '''
+    Augments the input data with various photometric transformations.
+    Convention: The original Transformer paper and most implementations follow this convention:
 
-  0: Unmasked values (positions the model can attend to)
-  1: Masked values (positions the model should ignore)
+    0: Unmasked values (positions the model can attend to)
+    1: Masked values (positions the model should ignore)
 
 
-  Parameters:
-  -------------------------------------------------------------------------------------------------------
+    Parameters:
+    -------------------------------------------------------------------------------------------------------
     data: Input data in tf.records format
     apply_white_noise (bool): Whether to apply Gaussian noise to the magnitude
     apply_binning (bool): Whether to apply binning and random dropping of bins
@@ -490,24 +490,25 @@ def augmentation(data,
     bin_width (int): The width of the bins for binning
     drop_data (float): The fraction of bins to drop during binning. Provide value 0.0 < drop_data <=1 
     for_inference (bool): Deserialize data to include - id, label, last_index - for inference
-    
-  Returns:
-  -------------------------------------------------------------------------------------------------------
+
+    Returns:
+    -------------------------------------------------------------------------------------------------------
     The augmented input data as a TensorFlow tensor.
-  '''
-  #
-  input_seq = dict()
-  if data is not None:
+    '''
     #
-    # Deserialize the data from tf.records
-    #
-    if for_inference:
-       input_dict = deserialize_for_inference(data)
-       input_seq['id'] = input_dict['id']
-       input_seq['label'] = input_dict['label']
-       input_dict['last_index'] = input_dict['last_index']
-       
+    input_seq = dict()
+    if data is not None:
+        #
+        # Deserialize the data from tf.records
+        #
+        if for_inference:
+            input_dict = deserialize_for_inference(data)
+            input_seq['id'] = input_dict['id']
+            input_seq['label'] = input_dict['label']
+            input_dict['last_index'] = input_dict['last_index']
+        
     input_dict = deserialize(data)
+    
     mag = input_dict['input_id'][:,1]
     magerr = input_dict['input_id'][:,2]
     #
@@ -616,7 +617,7 @@ def contrastive_data_loader(source,
     #
     # ----------------------------------- File Discovery using Glob Pattern ---------------------------------------------------
     glob_pattern = os.path.join(source,'*', '*', 'chunk_*.record') # Original pattern
-    # glob_pattern = os.path.join(source, '*', 'chunk_*.record') # Pattern after resampling data
+    # glob_pattern = os.path.join(source, 'chunk_*.record') # Pattern after resampling data
     print(f"\n\nSearching for TFRecord files using pattern: {glob_pattern}")
     filenames = tf.data.Dataset.list_files(glob_pattern, shuffle=False)
     # ----------------------------------------- Check if files were found -----------------------------------------------------
