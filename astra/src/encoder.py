@@ -4,7 +4,8 @@
 import numpy as np 
 import tensorflow as tf
 from tensorflow.keras import layers
- 
+# =========================================================
+
 
 def scaled_dot_product_attention(q, k, v, mask):
     """
