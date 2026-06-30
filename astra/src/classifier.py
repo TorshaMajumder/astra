@@ -7,6 +7,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Dense, Dropout, InputLayer
+# =========================================================
 
 
 def mlp_classifier(X_train, y_train, X_test, y_test, input_dim, num_classes, mlp_params):
