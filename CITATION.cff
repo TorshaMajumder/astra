@@ -4,6 +4,10 @@ authors:
 - family-names: "Majumder"
   given-names: "Torsha"
   orcid: "https://orcid.org/0009-0007-1309-3276" 
+- family-names: "Malanchev"
+  given-names: "Konstantin"
+- family-names: "O. Ishida"
+  given-names: "Emille E."
 title: "ASTRA: Attention-based Self-supervised Time-series Representation Architecture"
 version: 1.0.0
 identifiers:
