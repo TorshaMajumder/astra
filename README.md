@@ -186,5 +186,20 @@ astra-finetuning --help
 
 ---
 
+## Citation
+
+If you find this work useful, please cite our paper:
+
+```bibtex
+@misc{majumder2026multiscalecontrastiveattentionlightcurve,
+      title={Multi-Scale Contrastive Attention for Light-Curve Representation Learning}, 
+      author={Torsha Majumder and Konstantin Malanchev and Emille E. O. Ishida},
+      year={2026},
+      eprint={2606.31627},
+      archivePrefix={arXiv},
+      primaryClass={astro-ph.IM},
+      url={https://arxiv.org/abs/2606.31627}, 
+}
+
 
 

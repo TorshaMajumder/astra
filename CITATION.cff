@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Majumder"
+  given-names: "Torsha"
+  orcid: "https://orcid.org/0009-0007-1309-3276" 
+title: "ASTRA: Attention-based Self-supervised Time-series Representation Architecture"
+version: 1.0.0
+identifiers:
+  - type: doi
+    value: 10.48550/arXiv.2606.31627
+    description: The arXiv preprint of the paper
+date-released: 2026-06-30
+url: "https://github.com/TorshaMajumder/astra"
+
