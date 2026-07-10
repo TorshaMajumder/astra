@@ -1050,18 +1050,18 @@ def k_distil_training(student,
         # (IMPORTANT): Remove MLflow logging before packaging
         #
         # ===============================  MLFLOW METRIC LOGGING ===========================
-        mlflow.log_metric("loss/epoch_train", float(epoch_train_loss.numpy()), step=epoch)
-        if np.isfinite(epoch_val_loss):
-            mlflow.log_metric("loss/epoch_val", float(epoch_val_loss.numpy()), step=epoch)
-        mlflow.log_metric("learning_rate", float(current_lr), step=epoch)
+        # mlflow.log_metric("loss/epoch_train", float(epoch_train_loss.numpy()), step=epoch)
+        # if np.isfinite(epoch_val_loss):
+        #     mlflow.log_metric("loss/epoch_val", float(epoch_val_loss.numpy()), step=epoch)
+        # mlflow.log_metric("learning_rate", float(current_lr), step=epoch)
 
         # ==================================================================================
         # ---------------------- Checkpointing and Early Stopping based on Validation Loss -----------------------
         #
-        # if epoch_val_loss < best_val_loss:
-        #     print(f"\n  -- Validation loss improved from {best_val_loss:.4f} to {epoch_val_loss:.4f}. Saving model...\n")
-        #     best_val_loss = epoch_val_loss
-        #     es_count = 0
+        if epoch_val_loss < best_val_loss:
+            print(f"\n  -- Validation loss improved from {best_val_loss:.4f} to {epoch_val_loss:.4f}. Saving model...\n")
+            best_val_loss = epoch_val_loss
+            es_count = 0
             
         if best_weights_path:
             try:
@@ -1071,17 +1071,17 @@ def k_distil_training(student,
                 print(f"\nTeacher & Student weights (Epoch: {epoch}/{epochs}) saved successfully to {best_weights_path}.\n")
             except Exception as e:
                 print(f"\nError saving weights: {e}\n")
-        # else:
-        #     if distributed_val_dataset and np.isfinite(epoch_val_loss):
-        #         es_count += 1
-        #         print(f"\n  -- Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
-        #     elif not distributed_val_dataset and np.isfinite(epoch_train_loss):
-        #         es_count += 1 
-        #         print(f"\n  -- Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
+        else:
+            if distributed_val_dataset and np.isfinite(epoch_val_loss):
+                es_count += 1
+                print(f"\n  -- Val loss did not improve. Early stopping count: {es_count}/{patience}\n")
+            elif not distributed_val_dataset and np.isfinite(epoch_train_loss):
+                es_count += 1 
+                print(f"\n  -- Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
                 
-        # if es_count >= patience:
-        #     print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
-        #     break       
+        if es_count >= patience:
+            print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
+            break       
     #
     # ===================================================== END OF EPOCHS =======================================================
     #    
@@ -1093,20 +1093,20 @@ def k_distil_training(student,
     # =========================== MLFLOW MODEL LOGGING ===================================================
     #
     #
-    if best_weights_path:
-        input_example = {
-            'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
-            'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
-            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
-            'mask': tf.zeros((1, build_seq_len), dtype=tf.float32).numpy()
-        }
-        print(f"\nLogging the Teacher model to MLflow...")
-        mlflow.tensorflow.log_model(
-            model=teacher,
-            input_example=input_example,
-            name="AstraNet-Distil-Teacher(pre-trained)" 
-        )
-        print("\n\nTeacher model logged.")
+    # if best_weights_path:
+    #     input_example = {
+    #         'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+    #         'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+    #         'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32).numpy(),
+    #         'mask': tf.zeros((1, build_seq_len), dtype=tf.float32).numpy()
+    #     }
+    #     print(f"\nLogging the Teacher model to MLflow...")
+    #     mlflow.tensorflow.log_model(
+    #         model=teacher,
+    #         input_example=input_example,
+    #         name="AstraNet-Distil-Teacher(pre-trained)" 
+    #     )
+    #     print("\n\nTeacher model logged.")
     # ====================================================================================================
     # Save the weights to the local directory
     #

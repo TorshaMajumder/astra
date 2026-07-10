@@ -100,8 +100,8 @@ def distil_training(args):
     # Initialize MLflow Tracking
     # Set an URI and Experiment name for MLflow
     #
-    mlflow.set_tracking_uri(config['mlflow_uri'])
-    mlflow.set_experiment(config['mlflow_exp'])
+    # mlflow.set_tracking_uri(config['mlflow_uri'])
+    # mlflow.set_experiment(config['mlflow_exp'])
     # ===============================================
     #
     #
@@ -162,182 +162,182 @@ def distil_training(args):
     # Change the "run_name" to the format - {run_timestamp}_server_name"
     # --- Start MLflow Run ---
     #
-    with mlflow.start_run(run_name=f"{run_timestamp}_distil") as run:
-        #
-        # Add a tag for easier filtering (optional but good practice)
-        mlflow.set_tag("model_type", "AstraNet-Distil")
+    # with mlflow.start_run(run_name=f"{run_timestamp}_distil") as run:
+    #     #
+    #     # Add a tag for easier filtering (optional but good practice)
+    #     mlflow.set_tag("model_type", "AstraNet-Distil")
+    #     # ===============================================
+    #     # Change the "run_name" to the format - {run_timestamp}_server_name"
+    #     #
+    #     print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_cl\n\n")
+    # ==================================================================
+    # --- Use the strategy scope to create the model and optimizer ---
+    # ==================================================================
+    with strategy.scope():
         # ===============================================
-        # Change the "run_name" to the format - {run_timestamp}_server_name"
-        #
-        print(f"\n\nStarted MLflow Run: {run.info.run_id}/ run_name: {run_timestamp}_cl\n\n")
-        # ==================================================================
-        # --- Use the strategy scope to create the model and optimizer ---
-        # ==================================================================
-        with strategy.scope():
-            # ===============================================
-            # Instantiate Model 
-            # ===============================================
+        # Instantiate Model 
+        # ===============================================
+        
+        # Instantiate the Student Model
+        student_model = AstraNet_Distil(
+                                        num_layers=hparams["model_params"]["num_layers"],
+                                        d_model=hparams["model_params"]["d_model"],
+                                        base=hparams["model_params"]["base"],
+                                        num_heads=hparams["model_params"]["num_heads"],
+                                        dff=hparams["model_params"]["dff"],
+                                        rate=hparams["model_params"]["rate"],
+                                        mjd=hparams["model_params"]["mjd"],
+                                        use_drop=hparams["model_params"]["use_drop"],
+                                        use_band_info=hparams["model_params"]["use_band_info"],
+                                        time_scaling=hparams["model_params"]["time_scaling"],
+                                        projection_out=hparams["model_params"]["projection_dim"],
+                                        name="student_model" 
+                                    )
+        
+        
+        # Instantiate the Teacher Model
+        teacher_model = AstraNet_Distil(
+                                        num_layers=hparams["model_params"]["num_layers"],
+                                        d_model=hparams["model_params"]["d_model"],
+                                        base=hparams["model_params"]["base"],
+                                        num_heads=hparams["model_params"]["num_heads"],
+                                        dff=hparams["model_params"]["dff"],
+                                        rate=hparams["model_params"]["rate"],
+                                        mjd=hparams["model_params"]["mjd"],
+                                        use_drop=hparams["model_params"]["use_drop"],
+                                        use_band_info=hparams["model_params"]["use_band_info"],
+                                        time_scaling=hparams["model_params"]["time_scaling"],
+                                        projection_out=hparams["model_params"]["projection_dim"],
+                                        name="teacher_model" 
+                                    )
+        # ===============================================
+        # Instantiate Optimizer inside the scope
+        # use custom scheduler else a fixed lr
+        # ===============================================
+        scaled_lr = hparams['training_params']['base_lr'] * (global_batch_size / 256.0)
+        if config['use_custom_schedule']:
+            if config['scheduler_type'] == "cosinedecay":
+                    total_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['epochs'])
+                    warmup_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['warmup_epochs_sch']) 
+                    # 1. Cosine Decay with Linear Warmup
+                    lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
+                                                                                initial_learning_rate=0.0,             # Start at 0
+                                                                                decay_steps=total_steps,               # Total steps to decay over
+                                                                                alpha=1e-5,                            # Minimum LR multiplier at the end
+                                                                                warmup_target=scaled_lr,                    # Peak learning rate (e.g., 0.001)
+                                                                                warmup_steps=warmup_steps              # Steps to linearly warm up to the target
+                                                                            )
+                    
+                    optimizer = tf.keras.optimizers.AdamW(
+                                                            learning_rate=lr_schedule, 
+                                                            weight_decay=1e-4,                     
+                                                            beta_1=0.9, 
+                                                            beta_2=0.999, 
+                                                            epsilon=1e-8
+                                                        )
             
-            # Instantiate the Student Model
-            student_model = AstraNet_Distil(
-                                            num_layers=hparams["model_params"]["num_layers"],
-                                            d_model=hparams["model_params"]["d_model"],
-                                            base=hparams["model_params"]["base"],
-                                            num_heads=hparams["model_params"]["num_heads"],
-                                            dff=hparams["model_params"]["dff"],
-                                            rate=hparams["model_params"]["rate"],
-                                            mjd=hparams["model_params"]["mjd"],
-                                            use_drop=hparams["model_params"]["use_drop"],
-                                            use_band_info=hparams["model_params"]["use_band_info"],
-                                            time_scaling=hparams["model_params"]["time_scaling"],
-                                            projection_out=hparams["model_params"]["projection_dim"],
-                                            name="student_model" 
-                                        )
-            
-            
-            # Instantiate the Teacher Model
-            teacher_model = AstraNet_Distil(
-                                            num_layers=hparams["model_params"]["num_layers"],
-                                            d_model=hparams["model_params"]["d_model"],
-                                            base=hparams["model_params"]["base"],
-                                            num_heads=hparams["model_params"]["num_heads"],
-                                            dff=hparams["model_params"]["dff"],
-                                            rate=hparams["model_params"]["rate"],
-                                            mjd=hparams["model_params"]["mjd"],
-                                            use_drop=hparams["model_params"]["use_drop"],
-                                            use_band_info=hparams["model_params"]["use_band_info"],
-                                            time_scaling=hparams["model_params"]["time_scaling"],
-                                            projection_out=hparams["model_params"]["projection_dim"],
-                                            name="teacher_model" 
-                                        )
-            # ===============================================
-            # Instantiate Optimizer inside the scope
-            # use custom scheduler else a fixed lr
-            # ===============================================
-            scaled_lr = hparams['training_params']['base_lr'] * (global_batch_size / 256.0)
-            if config['use_custom_schedule']:
-                if config['scheduler_type'] == "cosinedecay":
-                        total_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['epochs'])
-                        warmup_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['warmup_epochs_sch']) 
-                        # 1. Cosine Decay with Linear Warmup
-                        lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
-                                                                                    initial_learning_rate=0.0,             # Start at 0
-                                                                                    decay_steps=total_steps,               # Total steps to decay over
-                                                                                    alpha=1e-5,                            # Minimum LR multiplier at the end
-                                                                                    warmup_target=scaled_lr,                    # Peak learning rate (e.g., 0.001)
-                                                                                    warmup_steps=warmup_steps              # Steps to linearly warm up to the target
-                                                                                )
-                        
-                        optimizer = tf.keras.optimizers.AdamW(
-                                                                learning_rate=lr_schedule, 
-                                                                weight_decay=1e-4,                     
-                                                                beta_1=0.9, 
-                                                                beta_2=0.999, 
-                                                                epsilon=1e-8
-                                                            )
-                
-                elif config['scheduler_type'] == "noam":
-                        d_model = hparams["model_params"]["d_model"] 
-                        warmup_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['warmup_epochs_sch'])
-                        custom_lr = CustomSchedule(d_model, warmup_steps=warmup_steps)
-                        optimizer = tf.keras.optimizers.Adam(learning_rate=custom_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+            elif config['scheduler_type'] == "noam":
+                    d_model = hparams["model_params"]["d_model"] 
+                    warmup_steps = int((hparams['training_params']['n_training_samples'] / global_batch_size) * hparams['training_params']['warmup_epochs_sch'])
+                    custom_lr = CustomSchedule(d_model, warmup_steps=warmup_steps)
+                    optimizer = tf.keras.optimizers.Adam(learning_rate=custom_lr, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
-                else:
-                        raise ValueError(f"\nUnsupported scheduler type: {hparams['training_params']['scheduler_type']}. Supported types are 'cosinedecay' and 'noam'.")    
             else:
-                optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['training_params']['initial_lr'])
+                    raise ValueError(f"\nUnsupported scheduler type: {hparams['training_params']['scheduler_type']}. Supported types are 'cosinedecay' and 'noam'.")    
+        else:
+            optimizer = tf.keras.optimizers.Adam(learning_rate=hparams['training_params']['initial_lr'])
 
-            # ==========================================================
-            # --- Build the model with a dummy call ---
-            # Need example input shapes - derive from maxlens
-            # ==========================================================
-            print("\n\nBuilding model with dummy input...\n\n")
-            # ==========================================================
-            # Use the sum of the maxlens of the ANCHOR as the sequence 
-            # length for the dummy input which is the final fixed length 
-            # for sequences
-            # ==========================================================
-            build_seq_len = int(sum(hparams["data_params"]["gv_maxlens"].values()))  
-            dummy_input = {
-                'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-                'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-                'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-                'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
-            }
-            # 
-            _ = student_model(dummy_input, training=False)
-            _ = teacher_model(dummy_input, training=False)
-            
-            # Force Teacher to have exact same initial weights as Student
-            for s_weight, t_weight in zip(student_model.variables, teacher_model.variables):
-                t_weight.assign(s_weight)
-                
-            # Initialize the Center variable
-            distil_center = tf.Variable(
-                                            tf.zeros([1, hparams["model_params"]["projection_dim"]]), # Must match projection_dim
-                                            trainable=False, 
-                                            name="distil_center"
-                                        )
-            student_model.trainable = True
-            teacher_model.trainable = False  # Teacher is updated via momentum, not backprop
-            # ==========================================================
-            # (Optional): Print the model summary
-            # ==========================================================
-            print("\n\nModel Summary:\n")
-            teacher_model.summary()
-            student_model.summary()
-            # ===================== END OF SCOPE ==========================
-        # ========================================================================================================================
-        # ============================= OUTSIDE STRATEGY SCOPE ==========================================
-        # -------------------------------------- Start Training -----------------------------------------
-        # --- Contrastive Training ---
-        train_loss_history,  val_loss_history = k_distil_training(
-                                                                student=student_model,
-                                                                teacher=teacher_model,
-                                                                center=distil_center,
-                                                                strategy=strategy,
-                                                                optimizer=optimizer,
-                                                                # -------------------
-                                                                path_to_read=hparams["data_params"]["path_to_read"],
-                                                                path_to_val=hparams["data_params"]["path_to_val"],
-                                                                path_to_save=hparams["data_params"]["path_to_save"],
-                                                                # -------------------
-                                                                global_batch_size=global_batch_size,
-                                                                patience=hparams["training_params"]["patience"],
-                                                                epochs=hparams["training_params"]["epochs"],
-                                                                buffer_size=hparams["data_params"]["buffer_size"],
-                                                                seed=1024,
-                                                                # -------------------
-                                                                student_temp=hparams["training_params"]["s_temp"],
-                                                                start_t_temp=hparams["training_params"]["start_t_temp"],
-                                                                base_t_temp=hparams["training_params"]["base_t_temp"],
-                                                                warmup_epochs_temp=hparams["training_params"]["warmup_epochs_temp"],
-                                                                base_ema_m=hparams["training_params"]["base_ema_m"],
-                                                                final_ema_m=hparams["training_params"]["final_ema_m"],
-                                                                use_ema_scheduler=hparams["training_params"]["use_ema_scheduler"],
-                                                                momentum_center=hparams["training_params"]["momentum_center"],
-                                                                # -------------------
-                                                                num_global_views=hparams["model_params"]["num_global_views"],
-                                                                num_local_views=hparams["model_params"]["num_local_views"],
-                                                                gv_maxlens=hparams["data_params"]["gv_maxlens"],
-                                                                lv_maxlens_list=hparams["data_params"]["lv_maxlens_list"], 
-                                                                apply_noise_list=hparams["data_params"]["apply_noise_list"], 
-                                                                noise_levels_list=hparams["data_params"]["noise_levels_list"], 
-                                                                apply_binning_list=hparams["data_params"]["apply_binning_list"], 
-                                                                apply_outlier_list=hparams["data_params"]["apply_outlier_list"],
-                                                                bin_widths_list=hparams["data_params"]["bin_widths_list"], 
-                                                                drop_rates_list=hparams["data_params"]["drop_rates_list"],
-                                                                # -------------------
-                                                                build_seq_len=build_seq_len
-                                                                
-                                                            )
-
-        # ============================================== END OF TRAINING ==================================================
-        # -------------------------------- Log all parameters from the dictionary -----------------------------------------
+        # ==========================================================
+        # --- Build the model with a dummy call ---
+        # Need example input shapes - derive from maxlens
+        # ==========================================================
+        print("\n\nBuilding model with dummy input...\n\n")
+        # ==========================================================
+        # Use the sum of the maxlens of the ANCHOR as the sequence 
+        # length for the dummy input which is the final fixed length 
+        # for sequences
+        # ==========================================================
+        build_seq_len = int(sum(hparams["data_params"]["gv_maxlens"].values()))  
+        dummy_input = {
+            'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
+        }
         # 
-        mlflow.log_params(hparams)
-        # ===============================================
-        print("\n\nRun logged to MLflow.")
+        _ = student_model(dummy_input, training=False)
+        _ = teacher_model(dummy_input, training=False)
+        
+        # Force Teacher to have exact same initial weights as Student
+        for s_weight, t_weight in zip(student_model.variables, teacher_model.variables):
+            t_weight.assign(s_weight)
+            
+        # Initialize the Center variable
+        distil_center = tf.Variable(
+                                        tf.zeros([1, hparams["model_params"]["projection_dim"]]), # Must match projection_dim
+                                        trainable=False, 
+                                        name="distil_center"
+                                    )
+        student_model.trainable = True
+        teacher_model.trainable = False  # Teacher is updated via momentum, not backprop
+        # ==========================================================
+        # (Optional): Print the model summary
+        # ==========================================================
+        print("\n\nModel Summary:\n")
+        teacher_model.summary()
+        student_model.summary()
+        # ===================== END OF SCOPE ==========================
+    # ========================================================================================================================
+    # ============================= OUTSIDE STRATEGY SCOPE ==========================================
+    # -------------------------------------- Start Training -----------------------------------------
+    # --- Contrastive Training ---
+    train_loss_history,  val_loss_history = k_distil_training(
+                                                            student=student_model,
+                                                            teacher=teacher_model,
+                                                            center=distil_center,
+                                                            strategy=strategy,
+                                                            optimizer=optimizer,
+                                                            # -------------------
+                                                            path_to_read=hparams["data_params"]["path_to_read"],
+                                                            path_to_val=hparams["data_params"]["path_to_val"],
+                                                            path_to_save=hparams["data_params"]["path_to_save"],
+                                                            # -------------------
+                                                            global_batch_size=global_batch_size,
+                                                            patience=hparams["training_params"]["patience"],
+                                                            epochs=hparams["training_params"]["epochs"],
+                                                            buffer_size=hparams["data_params"]["buffer_size"],
+                                                            seed=1024,
+                                                            # -------------------
+                                                            student_temp=hparams["training_params"]["s_temp"],
+                                                            start_t_temp=hparams["training_params"]["start_t_temp"],
+                                                            base_t_temp=hparams["training_params"]["base_t_temp"],
+                                                            warmup_epochs_temp=hparams["training_params"]["warmup_epochs_temp"],
+                                                            base_ema_m=hparams["training_params"]["base_ema_m"],
+                                                            final_ema_m=hparams["training_params"]["final_ema_m"],
+                                                            use_ema_scheduler=hparams["training_params"]["use_ema_scheduler"],
+                                                            momentum_center=hparams["training_params"]["momentum_center"],
+                                                            # -------------------
+                                                            num_global_views=hparams["model_params"]["num_global_views"],
+                                                            num_local_views=hparams["model_params"]["num_local_views"],
+                                                            gv_maxlens=hparams["data_params"]["gv_maxlens"],
+                                                            lv_maxlens_list=hparams["data_params"]["lv_maxlens_list"], 
+                                                            apply_noise_list=hparams["data_params"]["apply_noise_list"], 
+                                                            noise_levels_list=hparams["data_params"]["noise_levels_list"], 
+                                                            apply_binning_list=hparams["data_params"]["apply_binning_list"], 
+                                                            apply_outlier_list=hparams["data_params"]["apply_outlier_list"],
+                                                            bin_widths_list=hparams["data_params"]["bin_widths_list"], 
+                                                            drop_rates_list=hparams["data_params"]["drop_rates_list"],
+                                                            # -------------------
+                                                            build_seq_len=build_seq_len
+                                                            
+                                                        )
+
+    # ============================================== END OF TRAINING ==================================================
+        # # -------------------------------- Log all parameters from the dictionary -----------------------------------------
+        # # 
+        # mlflow.log_params(hparams)
+        # # ===============================================
+        # print("\n\nRun logged to MLflow.")
         #
         #
         # ================================================ END OF LOGGING =================================================
