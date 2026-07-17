@@ -22,6 +22,10 @@ Our pre-training pipeline utilizes multi-filter light curves from the Zwicky Tra
 
 Currently featuring **Astra-CLR** (our contrastive learning implementation), the framework also evaluates representations using a label-efficient, partial top-layer fine-tuning powered by a **Multi-View Late Fusion** mechanism. **ASTRA** is architected to seamlessly support other non-contrastive learning models in upcoming releases. 🚀
 
+---
+
+## 🏆 Support & Recognition
+This research is supported by the **NVIDIA Academic Grant Program (2025–2026)**. The project utilizes NVIDIA's high-performance compute resources to architect foundational-scale SSL frameworks for the next generation of time-domain astronomy.
 
 ---
 
