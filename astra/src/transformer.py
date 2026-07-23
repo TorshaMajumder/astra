@@ -815,6 +815,7 @@ def k_distil_training(student,
                     ):
     # --------------------------------------------
     save_at_epochs = [1, 2, 5, 10, 15, 20, 25, 30]
+    weights_filename = 'best_distil_teacher_weights' 
     # --------------------------------------------
     # ===================================================================================================================
     # ------------------------------------------- Setup Paths and TensorBoard Writer ------------------------------------
@@ -1087,6 +1088,9 @@ def k_distil_training(student,
             
             if best_weights_path:
                 try:
+                    # Re-creating paths to ensure they exist
+                    os.makedirs(os.path.dirname(best_weights_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(best_student_wt_path), exist_ok=True)
                     # Save the TEACHER model as the final output
                     teacher.save_weights(best_weights_path, save_format='tf') 
                     student.save_weights(best_student_wt_path, save_format='tf')
@@ -1105,10 +1109,18 @@ def k_distil_training(student,
         if current_epoch_num in save_at_epochs:
             print(f"\n  -- Milestone Epoch {current_epoch_num} reached. Saving weights...")
             try:
-                # Create specific filenames for this epoch to avoid overwriting the 'best' model
-                # Example: 'path/to/weights/teacher_epoch_5.weights.h5'
-                teacher_seq_path = f"{os.path.splitext(best_weights_path)[0]}_epoch_{current_epoch_num}.weights.h5"
-                student_seq_path = f"{os.path.splitext(best_student_wt_path)[0]}_epoch_{current_epoch_num}.weights.h5"
+                
+                # Define paths: path_to_save/epoch_1/best_distil_teacher_weights
+                epoch_folder = os.path.join(path_to_save, f"epoch_{current_epoch_num}")
+                student_epoch_folder = os.path.join(epoch_folder, "student")
+                
+                # Create these folders if they don't exist
+                os.makedirs(epoch_folder, exist_ok=True)
+                os.makedirs(student_epoch_folder, exist_ok=True)
+                
+                # Define full file paths (no .h5 extension as requested)
+                teacher_seq_path = os.path.join(epoch_folder, weights_filename)
+                student_seq_path = os.path.join(student_epoch_folder, "best_weight")
                 
                 teacher.save_weights(teacher_seq_path, save_format='tf')
                 student.save_weights(student_seq_path, save_format='tf')
