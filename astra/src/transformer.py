@@ -812,7 +812,9 @@ def k_distil_training(student,
                          # ---------------
                          build_seq_len=None
                     ):
-    
+    # --------------------------------------------
+    save_at_epochs = [1, 2, 5, 10, 15, 20, 25, 30]
+    # --------------------------------------------
     # ===================================================================================================================
     # ------------------------------------------- Setup Paths and TensorBoard Writer ------------------------------------
     #
@@ -1058,19 +1060,25 @@ def k_distil_training(student,
         # ==================================================================================
         # ---------------------- Checkpointing and Early Stopping based on Validation Loss -----------------------
         #
+        # ***********************************************************************************
+        current_epoch_num = epoch + 1  # Convert 0-index to 1-index for easier tracking
+        improved = False
+        # ***********************************************************************************
+        
         if epoch_val_loss < best_val_loss:
             print(f"\n  -- Validation loss improved from {best_val_loss:.4f} to {epoch_val_loss:.4f}. Saving model...\n")
             best_val_loss = epoch_val_loss
             es_count = 0
+            improved = True
             
-        if best_weights_path:
-            try:
-                # Save the TEACHER model as the final output
-                teacher.save_weights(best_weights_path, save_format='tf') 
-                student.save_weights(best_student_wt_path, save_format='tf')
-                print(f"\nTeacher & Student weights (Epoch: {epoch}/{epochs}) saved successfully to {best_weights_path}.\n")
-            except Exception as e:
-                print(f"\nError saving weights: {e}\n")
+            if best_weights_path:
+                try:
+                    # Save the TEACHER model as the final output
+                    teacher.save_weights(best_weights_path, save_format='tf') 
+                    student.save_weights(best_student_wt_path, save_format='tf')
+                    print(f"\nTeacher & Student weights (Epoch: {epoch}/{epochs}) saved successfully to {best_weights_path}.\n")
+                except Exception as e:
+                    print(f"\nError saving weights: {e}\n")
         else:
             if distributed_val_dataset and np.isfinite(epoch_val_loss):
                 es_count += 1
@@ -1078,7 +1086,22 @@ def k_distil_training(student,
             elif not distributed_val_dataset and np.isfinite(epoch_train_loss):
                 es_count += 1 
                 print(f"\n  -- Train loss did not improve. Early stopping count: {es_count}/{patience}\n")
+        # ------------------------------------------------------------------------------------------------------        
+        # SAVE SPECIFIC EPOCH SEQUENCE [1, 2, 5, 10, etc.]
+        if current_epoch_num in save_at_epochs:
+            print(f"\n  -- Milestone Epoch {current_epoch_num} reached. Saving weights...")
+            try:
+                # Create specific filenames for this epoch to avoid overwriting the 'best' model
+                # Example: 'path/to/weights/teacher_epoch_5.weights.h5'
+                teacher_seq_path = f"{os.path.splitext(best_weights_path)[0]}_epoch_{current_epoch_num}.weights.h5"
+                student_seq_path = f"{os.path.splitext(best_student_wt_path)[0]}_epoch_{current_epoch_num}.weights.h5"
                 
+                teacher.save_weights(teacher_seq_path, save_format='tf')
+                student.save_weights(student_seq_path, save_format='tf')
+                print(f"  >> Epoch {current_epoch_num} milestone weights saved.")
+            except Exception as e:
+                print(f"\nError saving milestone weights: {e}\n")
+        # --------------------------------------------------------------------------------------------------------
         if es_count >= patience:
             print(f'\n\n --[INFO] Early Stopping Triggered after {epoch + 1} epochs.\n')
             break       
@@ -1110,9 +1133,9 @@ def k_distil_training(student,
     # ====================================================================================================
     # Save the weights to the local directory
     #
-    if best_weights_path and os.path.exists(best_weights_path):
-         print(f"\n\n-- Best weights saved at: {best_weights_path} (Best Val Loss: {best_val_loss:.5f})")
-    else:
-         print("\n\nNo weights were saved (either no improvement found or path issue).")
+    # if best_weights_path and os.path.exists(best_weights_path):
+    #      print(f"\n\n-- Best weights saved at: {best_weights_path} (Best Val Loss: {best_val_loss:.5f})")
+    # else:
+    #      print("\n\nNo weights were saved (either no improvement found or path issue).")
 
     return epoch_wise_train_loss, epoch_wise_val_loss
