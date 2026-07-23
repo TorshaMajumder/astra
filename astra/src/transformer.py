@@ -2,6 +2,7 @@
 # Import all dependencies
 # =========================================================
 import os
+import time
 import mlflow
 import traceback
 import numpy as np
@@ -934,6 +935,9 @@ def k_distil_training(student,
     print(f"\n\nStarting training run for {epochs} epochs...\n\n")
     # ================================================================================
     for epoch in range(epochs):
+        # -------------------------------
+        epoch_start_time = time.time()
+        # -------------------------------
         # ---------------------------- TRAINING EPOCH --------------------------------
         #
         # Reset metrics at the start of each epoch
@@ -1033,6 +1037,11 @@ def k_distil_training(student,
         epoch_wise_val_loss.append(float(epoch_val_loss.numpy()) if np.isfinite(epoch_val_loss) else epoch_val_loss)
         print(f"\n{20*'='} EPOCH ({epoch + 1}/{epochs}) Summary {20*'='}\n")
         print(f"  Train Loss: {epoch_train_loss:.4f} | Val Loss: {epoch_val_loss:.4f}\n")
+        
+        # *********************************************************************************
+        # Calculate duration
+        epoch_end_time = time.time()
+        seconds_per_epoch = epoch_end_time - epoch_start_time
         # ==================================================================================
         # Log epoch metrics to TensorBoard
         #
@@ -1040,6 +1049,9 @@ def k_distil_training(student,
             with summary_writer.as_default(step=epoch):
                 
                 tf.summary.scalar('loss/epoch_train', epoch_train_loss)
+                # Log the time to TensorBoard
+                tf.summary.scalar('stats/seconds_per_epoch', seconds_per_epoch) # <--- Log it here
+                
                 val_loss_for_log = epoch_val_loss.numpy() if hasattr(epoch_val_loss, 'numpy') else epoch_val_loss
                 
                 if np.isfinite(val_loss_for_log):
@@ -1047,6 +1059,8 @@ def k_distil_training(student,
                 
                 tf.summary.scalar('learning_rate', current_lr)
             summary_writer.flush()
+        # Print the time to the console
+        print(f"  -- Epoch {epoch+1} finished in {seconds_per_epoch:.2f} seconds.")
         #
         #
         # (IMPORTANT): Remove MLflow logging before packaging
