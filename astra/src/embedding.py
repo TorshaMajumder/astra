@@ -43,10 +43,15 @@ class AstraEmbedding(layers.Layer):
     self.seq_embedding = layers.Dense(d_model, name="seq_emb") 
     # if band information is used for embeddings
     # if self.use_band_info:
-    self.seg_embedding_nonlinear = tf.keras.Sequential([
-                                            tf.keras.layers.Dense(32, activation='relu', name="seg_emb_dense_1"),
-                                            tf.keras.layers.Dense(d_model, name="seg_emb_dense_2") 
-                                        ], name="segment_embedding_nonlinear")
+    # self.seg_embedding_nonlinear = tf.keras.Sequential([
+    #                                         tf.keras.layers.Dense(32, activation='relu', name="seg_emb_dense_1"),
+    #                                         tf.keras.layers.Dense(d_model, name="seg_emb_dense_2") 
+    #                                     ], name="segment_embedding_nonlinear")
+    self.seg_embedding_nonlinear = tf.keras.layers.Embedding(
+                                                            input_dim=3, 
+                                                            output_dim=d_model, 
+                                                            name="segment_embedding_categorical"
+                                                        )
     # -----------------------------------------------------------------------
     # Uncomment if you want to use a linear projection
     # self.seg_embedding_linear = layers.Dense(d_model, name="segment_embedding_linear")

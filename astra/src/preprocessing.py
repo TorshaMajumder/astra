@@ -775,13 +775,25 @@ def create_inference_loader(source,
                                                       input_dict['bands'], 
                                                       maxlen
                                                   )
+
+        # Extract the wavelength column
+        wavelengths = final_features[:, :, 3]
+    
+        # Create the integer mapping
+        # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
+        band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
+                    tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
+                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+    
+        # Cast to int32 (Crucial for the Embedding layer)
+        band_ids = tf.cast(band_ids, tf.int32)
         
         output_dict['id'] = input_dict['id']
         output_dict['label'] = input_dict['label']
         output_dict['mask'] = tf.expand_dims(final_mask, axis=-1) 
         output_dict['input'] = tf.expand_dims(final_features[:, :, 1], axis=-1)
         output_dict['times'] = tf.expand_dims(final_features[:, :, 0], axis=-1)
-        output_dict['band_info'] = tf.expand_dims(final_features[:, :, 3], axis=-1)
+        output_dict['band_info'] = band_ids
       
         return output_dict
     
@@ -832,10 +844,23 @@ def generate_multiview_crops(input_dict, maxlens, noise_level=None, apply_noise=
             out_mag = photometric_outlier(feat[:, 1], msk, mag_limit, mag_saturation)
             feat = tf.concat([feat[:, 0:1], tf.reshape(out_mag, (-1, 1)), feat[:, 2:]], axis=1)
             
+        # Extract the wavelength column
+        wavelengths = feat[:, 3]
+    
+        # Create the integer mapping
+        # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
+        band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
+                    tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
+                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+    
+        # Cast to int32 (Crucial for the Embedding layer)
+        band_ids = tf.cast(band_ids, tf.int32)
+
         views_out.append({
             'input': tf.expand_dims(feat[:, 1], axis=-1),
             'times': tf.expand_dims(feat[:, 0], axis=-1),
-            'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+            # 'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+            'band_info': band_ids,
             'mask': msk
         })
         
@@ -872,10 +897,24 @@ def generate_sliding_crop(input_dict, maxlens, noise_level=None, apply_noise=Fal
         out_mag = photometric_outlier(feat[:, 1], msk, mag_limit, mag_saturation)
         feat = tf.concat([feat[:, 0:1], tf.reshape(out_mag, (-1, 1)), feat[:, 2:]], axis=1)
             
+    # Extract the wavelength column
+    wavelengths = feat[:, 3]
+
+    # Create the integer mapping
+    # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
+    band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
+                tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
+                tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+
+    # Cast to int32 (Crucial for the Embedding layer)
+    band_ids = tf.cast(band_ids, tf.int32)
+
+
     view_out = {
         'input': tf.expand_dims(feat[:, 1], axis=-1),
         'times': tf.expand_dims(feat[:, 0], axis=-1),
-        'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+        # 'band_info': tf.expand_dims(feat[:, 3], axis=-1),
+        'band_info': band_ids,
         'mask': msk
     }
         
