@@ -199,6 +199,11 @@ class AstraEmbedding(layers.Layer):
     if self.use_band_info and x.get('band_info') is not None:
         
         band_info = x['band_info']   # Shape: (batch, seq_len, 1)
+        # --- NEW FAILSAFE ---
+        # If band_info shape is (batch, seq_len, 1), squeeze it to (batch, seq_len)
+        if len(band_info.shape) == 3 and band_info.shape[-1] == 1:
+            band_info = tf.squeeze(band_info, axis=-1)
+
         band_embeddings = self.seg_embedding_nonlinear(band_info)                    
         emb += band_embeddings
     #

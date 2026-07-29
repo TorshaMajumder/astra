@@ -261,7 +261,7 @@ def distil_training(args):
         dummy_input = {
             'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
             'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'band_info': tf.zeros((1, build_seq_len), dtype=tf.int32),
             'mask': tf.zeros((1, build_seq_len), dtype=tf.float32) # Mask shape (batch, seq_len)
         }
         # 

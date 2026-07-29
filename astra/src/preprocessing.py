@@ -783,7 +783,7 @@ def create_inference_loader(source,
         # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
         band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
                     tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
-                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, 0))) # -1 is a fallback for errors
     
         # Cast to int32 (Crucial for the Embedding layer)
         band_ids = tf.cast(band_ids, tf.int32)
@@ -851,7 +851,7 @@ def generate_multiview_crops(input_dict, maxlens, noise_level=None, apply_noise=
         # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
         band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
                     tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
-                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+                    tf.where(tf.equal(wavelengths, ztf_band['i']), 2, 0))) # -1 is a fallback for errors
     
         # Cast to int32 (Crucial for the Embedding layer)
         band_ids = tf.cast(band_ids, tf.int32)
@@ -904,7 +904,7 @@ def generate_sliding_crop(input_dict, maxlens, noise_level=None, apply_noise=Fal
     # Map g (481.0) -> 0, r (644.0) -> 1, i (781.0) -> 2
     band_ids = tf.where(tf.equal(wavelengths, ztf_band['g']), 0,
                 tf.where(tf.equal(wavelengths, ztf_band['r']), 1,
-                tf.where(tf.equal(wavelengths, ztf_band['i']), 2, -1))) # -1 is a fallback for errors
+                tf.where(tf.equal(wavelengths, ztf_band['i']), 2, 0))) # -1 is a fallback for errors
 
     # Cast to int32 (Crucial for the Embedding layer)
     band_ids = tf.cast(band_ids, tf.int32)

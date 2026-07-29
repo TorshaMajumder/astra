@@ -573,7 +573,7 @@ def k_distil_embeddings(config):
         dummy_input = {
             'input': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
             'times': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
-            'band_info': tf.zeros((1, build_seq_len, 1), dtype=tf.float32),
+            'band_info': tf.zeros((1, build_seq_len), dtype=tf.int32),
             'mask': tf.zeros((1, build_seq_len, ), dtype=tf.float32)
         }
         #
@@ -607,7 +607,7 @@ def k_distil_embeddings(config):
     input_layer = {
         'input': tf.keras.Input(shape=(build_seq_len, 1), name='input', dtype=tf.float32),
         'times': tf.keras.Input(shape=(build_seq_len, 1), name='times', dtype=tf.float32),
-        'band_info': tf.keras.Input(shape=(build_seq_len, 1), name='band_info', dtype=tf.float32),
+        'band_info': tf.keras.Input(shape=(build_seq_len,), name='band_info', dtype=tf.int32),
         'mask': tf.keras.Input(shape=(build_seq_len, ), name='mask', dtype=tf.float32)
     }
     # ------------------------------------------------------------------------------------------------
@@ -687,7 +687,7 @@ def k_distil_embeddings(config):
                 flat_inputs = {
                     'input': tf.reshape(batch['input'], (-1, seq_len, 1)),
                     'times': tf.reshape(batch['times'], (-1, seq_len, 1)),
-                    'band_info': tf.reshape(batch['band_info'], (-1, seq_len, 1)),
+                    'band_info': tf.reshape(batch['band_info'], (-1, seq_len, )),
                     'mask': tf.reshape(batch['mask'], (-1, seq_len, )) 
                 }
                 # Get the embeddings from the encoder model
