@@ -11,8 +11,8 @@ path_to_save: "/kaggle/working/"
 # Provide num_global_views & num_local_views
 # We have consider num_global_views = 3, i.e., (start, mid, end) windows of the light curve
 # Adjust the num_local_views based on VRAM capacity.
-num_global_views: 3
-num_local_views: 6
+num_global_views: 2
+num_local_views: 0
 #
 # --- Training Hyperparameters ---
 #

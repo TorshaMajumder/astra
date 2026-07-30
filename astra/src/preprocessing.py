@@ -823,7 +823,7 @@ def generate_multiview_crops(input_dict, maxlens, noise_level=None, apply_noise=
     mag_limit = ztf_mag['limit']
     mag_saturation = ztf_mag['saturation']
 
-    for i in range(3):
+    for i in range(2):
         feat = final_features[i]
         msk = final_mask[i]
         
