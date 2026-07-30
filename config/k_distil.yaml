@@ -12,7 +12,7 @@ path_to_save: "/kaggle/working/"
 # We have consider num_global_views = 3, i.e., (start, mid, end) windows of the light curve
 # Adjust the num_local_views based on VRAM capacity.
 num_global_views: 2
-num_local_views: 0
+num_local_views: 4
 #
 # --- Training Hyperparameters ---
 #
@@ -42,7 +42,7 @@ lv_maxlens_list:
 - {'g': 90, 'r': 100, 'i': 10}  # For LV 1, 2, 3 (Start, Mid, End)
 - {'g': 50, 'r': 55, 'i': 5}   # For LV 4 (Sliding)
 - {'g': 50, 'r': 60, 'i': 5}  # For LV 5 (Sliding)
-- {'g': 50, 'r': 60, 'i': 10}    # For LV 6 (Sliding)
+# - {'g': 50, 'r': 60, 'i': 10}    # For LV 6 (Sliding)
   
 apply_noise_list: [True, True, True, False, False]
 noise_levels_list: [0.01,   0.01,  0.009,  0.05,   0.02]

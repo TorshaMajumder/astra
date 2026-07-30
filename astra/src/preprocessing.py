@@ -927,7 +927,7 @@ def create_astra_distil_views(data,
         #
         # Any remaining Local Views (>3) use sliding_window
         #
-        remaining_lvs = num_local_views - 3
+        remaining_lvs = num_local_views - 2
         if remaining_lvs > 0:
             for i in range(remaining_lvs):
                 # We shift indices to pull unique parameters for each sliding window
