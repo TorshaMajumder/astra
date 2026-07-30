@@ -1052,7 +1052,7 @@ def astra_distil_data_loader(source,
     view_shape = {
                   'input': tf.TensorShape([build_seq_len, 1]),
                   'times': tf.TensorShape([build_seq_len, 1]),
-                  'band_info': tf.TensorShape([build_seq_len, 1]),
+                  'band_info': tf.TensorShape([build_seq_len]),
                   'mask': tf.TensorShape([build_seq_len])
                 }   
     padded_view_shapes = (view_shape,) * n_views
@@ -1061,7 +1061,7 @@ def astra_distil_data_loader(source,
     padded_view_values = {
                             'input': tf.constant(0.0, dtype=tf.float32),
                             'times': tf.constant(0.0, dtype=tf.float32),
-                            'band_info': tf.constant(0.0, dtype=tf.float32),
+                            'band_info': tf.constant(0, dtype=tf.int32),
                             'mask': tf.constant(1.0, dtype=tf.float32) 
                         }
     final_padding_values = (padded_view_values,) * n_views
