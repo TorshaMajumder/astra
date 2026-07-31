@@ -53,12 +53,12 @@ drop_rates_list: [0.02,   0.02,  0.01,  0.01,   0.01]
 #
 # --- Model Parameters ---
 #
-num_layers: 4          # Number of encoder layers
+num_layers: 6          # Number of encoder layers
 mjd: True              # Use MJD for positional encoding
 base: 10000.0          # Base for positional encoding
-d_model: 256           # Embedding dimension
-num_heads: 4           # Number of attention heads
-dff: 1024              # Feed-forward network dimension
+d_model: 384           # Embedding dimension
+num_heads: 6           # Number of attention heads
+dff: 1536              # Feed-forward network dimension
 rate: 0.1              # Dropout rate
 use_band_info: True    # Use segment embeddings
 time_scaling: 904.78   # Scaling factor for time indices in scaled positional encoding (288 * np.pi)
