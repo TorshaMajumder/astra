@@ -620,16 +620,29 @@ def k_distil_embeddings(config):
     # Get the mask tensor from the input dictionary (IMPORTANT for encoder and pooling laye)
     # 
     mask_input = input_layer['mask']
+    # ==================== NEW CLS INFERENCE LOGIC ====================
+    # Get the trained CLS token from the backbone and tile it
+    batch_size = tf.shape(embeddings)[0]
+    cls_token = teacher_model.backbone.cls_token
+    cls_tokens = tf.tile(cls_token, [batch_size, 1, 1]) 
+    
+    # Concatenate CLS token to the front
+    embeddings_with_cls = tf.concat([cls_tokens, embeddings], axis=1)
+    
+    # Pad the mask for the CLS token (0 = unmasked)
+    cls_mask = tf.zeros((batch_size, 1), dtype=mask_input.dtype)
+    mask_with_cls = tf.concat([cls_mask, mask_input], axis=1)
+    # =================================================================
     #
     # (STEP:2) Get the embeddings and the attention weights
     #
-    encoder_output, all_attention_weights = teacher_model.backbone.encoder(embeddings, mask=mask_input)
+    encoder_output, all_attention_weights = teacher_model.backbone.encoder(embeddings_with_cls, mask=mask_with_cls)
     #
-    # (STEP:3) Invert the mask using ASTRA masking logic and get the pooled output
+    # (STEP:3) Extract the CLS token (Index 0) using a Lambda layer instead of pooling
     #
     pool_mask = tf.keras.layers.Lambda(
-                                        lambda m: tf.logical_not(tf.cast(m, tf.bool))
-                                        )(mask_input)
+                                        lambda x: x[:, 0, :], name="cls_extraction"
+                                        )(encoder_output)
     pooled_output = teacher_model.backbone.pooling(encoder_output, mask=pool_mask)
     #
     # (STEP:4) Get the final ASTRA encoder model and Set to inference mode

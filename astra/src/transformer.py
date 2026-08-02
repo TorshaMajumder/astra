@@ -56,7 +56,14 @@ class AstraNet(tf.keras.Model):
         # Instantiate Pooling Layer
         # Using Global Average Pooling as default
         #
-        self.pooling = layers.GlobalAveragePooling1D(name='avg_pooling')
+        # self.pooling = layers.GlobalAveragePooling1D(name='avg_pooling')
+        # Create the learnable CLS Token
+        self.cls_token = self.add_weight(
+                                            name="cls_token",
+                                            shape=(1, 1, d_model),
+                                            initializer=tf.keras.initializers.RandomNormal(stddev=0.02),
+                                            trainable=True
+                                        )
         #
         # Instantiate Projection Head Layer
         #
@@ -100,13 +107,33 @@ class AstraNet(tf.keras.Model):
         # Apply Embedding Layer (takes the dictionary 'x')
         # Pass training flag for potential dropout in embedding
         embeddings = self.embedding_layer(x, training=training) # (batch, seq_len, d_model)
+
+        batch_size = tf.shape(embeddings)[0]
+        # ==================== CLS TOKEN LOGIC ====================
+        # Broadcast the CLS token to match the batch size
+        # cls_tokens shape: (batch_size, 1, d_model)
+        cls_tokens = tf.tile(self.cls_token, [batch_size, 1, 1]) 
+        # Concatenate the CLS token to the FRONT of the sequence
+        # New embeddings shape: (batch_size, seq_len + 1, d_model)
+        embeddings = tf.concat([cls_tokens, embeddings], axis=1) 
+        # Update the mask to account for the new CLS token!
+        # Your mask uses 0 for unmasked and 1 for masked. The CLS token must always be unmasked (0).
+        cls_mask = tf.zeros((batch_size, 1), dtype=mask.dtype)
+        # New mask shape: (batch_size, seq_len + 1)
+        mask = tf.concat([cls_mask, mask], axis=1)
         # Apply Encoder (takes embeddings and mask)
         # Pass training flag for dropout/LN in encoder
+        # Pass through the encoder
+        # enc_output shape: (batch_size, seq_len + 1, d_model)
         enc_output, all_attention_weights = self.encoder(embeddings, mask, training=training) # (batch, seq_len, d_model)
         # Apply Pooling
         # Invert mask for pooling (True where elements should be KEPT)
-        pool_mask = tf.logical_not(tf.cast(mask, tf.bool))
-        pooled_output = self.pooling(enc_output, mask=pool_mask) # (batch, d_model)
+        # pool_mask = tf.logical_not(tf.cast(mask, tf.bool))
+        # pooled_output = self.pooling(enc_output, mask=pool_mask) # (batch, d_model)
+        # Extract ONLY the CLS token (which is at index 0)
+        # pooled_output shape: (batch_size, d_model)
+        pooled_output = enc_output[:, 0, :] 
+
         # Apply Projection Head 
         # Pass training flag if projection head had dropout/BN 
         if self.projection_dim is not None:
