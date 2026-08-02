@@ -902,13 +902,22 @@ def create_astra_distil_views(data,
     # GENERATE GLOBAL VIEWS (Indices 0, 1, 2)
     # We use the 0th index of the parameter lists for the Global Views batch
     # =====================================================================
-    global_views = generate_multiview_crops(
+    for _ in range(3):
+        gv_stochastic = generate_sliding_crop(
                                             input_dict, gv_maxlens, 
                                             noise_levels_list[0], apply_noise_list[0], 
                                             apply_binning_list[0], apply_outlier_list[0], 
                                             bin_widths_list[0], drop_rates_list[0]
                                         )
-    all_views.extend(global_views)
+        all_views.extend(gv_stochastic)
+    
+    # global_views = generate_multiview_crops(
+    #                                         input_dict, gv_maxlens, 
+    #                                         noise_levels_list[0], apply_noise_list[0], 
+    #                                         apply_binning_list[0], apply_outlier_list[0], 
+    #                                         bin_widths_list[0], drop_rates_list[0]
+    #                                     )
+    # all_views.extend(global_views)
     # =====================================================================
     # GENERATE LOCAL VIEWS (Indices 3, 4, 5...)
     # =====================================================================
