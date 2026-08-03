@@ -640,10 +640,8 @@ def k_distil_embeddings(config):
     #
     # (STEP:3) Extract the CLS token (Index 0) using a Lambda layer instead of pooling
     #
-    pool_mask = tf.keras.layers.Lambda(
-                                        lambda x: x[:, 0, :], name="cls_extraction"
-                                        )(encoder_output)
-    pooled_output = teacher_model.backbone.pooling(encoder_output, mask=pool_mask)
+    pooled_output = tf.keras.layers.Lambda(lambda x: x[:, 0, :], name="cls_extraction")(encoder_output)
+    # pooled_output = teacher_model.backbone.pooling(encoder_output, mask=pool_mask)
     #
     # (STEP:4) Get the final ASTRA encoder model and Set to inference mode
     #
