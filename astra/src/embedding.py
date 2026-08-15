@@ -47,14 +47,14 @@ class AstraEmbedding(layers.Layer):
     #                                         tf.keras.layers.Dense(32, activation='relu', name="seg_emb_dense_1"),
     #                                         tf.keras.layers.Dense(d_model, name="seg_emb_dense_2") 
     #                                     ], name="segment_embedding_nonlinear")
-    self.seg_embedding_nonlinear = tf.keras.layers.Embedding(
-                                                            input_dim=3, 
-                                                            output_dim=d_model, 
-                                                            name="segment_embedding_categorical"
-                                                        )
+    # self.seg_embedding_nonlinear = tf.keras.layers.Embedding(
+    #                                                         input_dim=3, 
+    #                                                         output_dim=d_model, 
+    #                                                         name="segment_embedding_categorical"
+    #                                                     )
     # -----------------------------------------------------------------------
     # Uncomment if you want to use a linear projection
-    # self.seg_embedding_linear = layers.Dense(d_model, name="segment_embedding_linear")
+    self.seg_embedding_nonlinear = layers.Dense(d_model, name="segment_embedding_linear")
     # -----------------------------------------------------------------------
     # get the positional embeddings
     self.pos_encoding = self.build_positional_encoding() 

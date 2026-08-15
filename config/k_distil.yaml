@@ -2,8 +2,8 @@
 #
 # --- Data set Paths ---
 #
-path_to_read: "/kaggle/input/datasets/torshamajumder/astra-ablation-dataset/ablation_data_astra-distil_6K/train"
-path_to_val: "/kaggle/input/datasets/torshamajumder/astra-ablation-dataset/ablation_data_astra-distil_6K/val"
+path_to_read: "/kaggle/input/datasets/torshamajumder/astra-data-25k/ablation_data_astra-distil/train"
+path_to_val: "/kaggle/input/datasets/torshamajumder/astra-data-25k/ablation_data_astra-distil/val"
 path_to_save: "/kaggle/working/"
 #
 # --- Architecture ---
