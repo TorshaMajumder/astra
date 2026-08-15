@@ -73,7 +73,7 @@ use_custom_schedule: True
 scheduler_type: "cosinedecay"           # Type of learning rate scheduler (e.g., "cosinedecay", "noam")
 base_lr: 0.0005                         # Base learning rate for scaling when using custom schedule.
 warmup_epochs_sch: 10                   # Number of warmup steps for Noam scheduler
-n_training_samples: 4800                    # Total number of training samples 10000+3000+7500
+n_training_samples: 20995                    # Total number of training samples 10000+3000+7500
 # ---- parameters when use_custom_schedule=True -----
 initial_lr: 0.001                       # initial_lr=lr, # Only if use_custom_schedule=False
 # ------------------------------------------------------------------------------------
