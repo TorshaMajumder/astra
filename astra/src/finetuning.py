@@ -51,7 +51,7 @@ def finetune_data_loader(source_dir,
     # --------------------------------------------------------------------------------------
     # ------------------------------ File Discovery using Glob Pattern ---------------------
     if is_training:
-        glob_pattern = os.path.join(source_dir,'*', '*','chunk_*.record')
+        glob_pattern = os.path.join(source_dir, '*','chunk_*.record')
     else:
         glob_pattern = os.path.join(source_dir,'*','chunk_*.record')
     # --------------------------------------------------------------------------------------

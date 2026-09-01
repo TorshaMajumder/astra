@@ -1294,8 +1294,8 @@ def main():
     
     elif args.loss == "k_distil":
         if config['finetune']:
-            # finetuned_k_distil_embeddings(config)
-            generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
+            finetuned_k_distil_embeddings(config)
+            # generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])
         else:
             k_distil_embeddings(config)
             # generate_plot(f"{config['path_to_save']}/embeddings.h5", config['path_to_class_count'], 256, config['mlflow_upload'], config['mlflow_name'], config['mlflow_exp'])

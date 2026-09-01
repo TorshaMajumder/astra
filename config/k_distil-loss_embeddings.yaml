@@ -3,9 +3,9 @@
 # --- Data set Paths ---
 #
 path_to_load: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/finetune_20260329_170424/"
-path_to_data: "/home/nvidia/workplace/dataset/all_dataset/test/"
+path_to_data: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation_data_astra-distil_6K/train/"
 path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/finetuned/test"
-path_to_class_count: "/home/nvidia/workplace/dataset/all_dataset/test/data_stats.csv"
+path_to_class_count: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation_data_astra-distil_6K/train/data_stats.csv"
 #
 # --- Inference parameters ---
 #
