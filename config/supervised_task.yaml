@@ -26,61 +26,61 @@ projection_dim: 2048    # Projection head dimension
 # IMPORTANT: This must match the dataset's classes
 label_map: {
             'AGN': {
-                    'count': 10,
+                    'count': 4,
                     'id': 0
                 },
             
             'DSCT|GDOR|SXPHE': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 1
                 },
             'ECL': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 2
                 },
             'LPV': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 3
                 },
             'RS': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 4
                 },
             'S': {
-                    'count': 4000,
+                    'count': 5,
                     'id': 5
                 },
             'SOLAR_LIKE': {
-                    'count': 4000,
+                    'count': 5,
                     'id': 6
                 },
             'YSO': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 7
                 },
             'CEP': {
-                    'count': 967,
+                    'count': 4,
                     'id': 8
                 },
             'CV': {
-                    'count': 860,
+                    'count': 4,
                     'id': 9
                 },
             'ELL': {
-                'count': 4000,
+                'count': 4,
                 'id': 10
             },
             'RR': {
-                    'count': 4000,
+                    'count': 4,
                     'id': 11
                 }
             }
 
 global_view_maxlens: {'g': 250, 'r': 300, 'i': 50}
 lr: 0.00001             # Use a very small learning rate
-batch_size: 16         # Adjust the batch_size for fine-tuning
+batch_size: 16          # Adjust the batch_size for fine-tuning
 num_gpus: 1             # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
-epochs: 5             # Number of training epochs
+epochs: 50             # Number of training epochs
 patience: 10            # Early stopping patience
 buffer_size: 5000      # Shuffle buffer size
-unfreeze_layers: 'all'      # freeze all encoderLayers
+unfreeze_layers: "all"      # freeze all encoderLayers
