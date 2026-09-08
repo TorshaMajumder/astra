@@ -75,16 +75,16 @@ def finetuned_k_distil_embeddings(config):
     #
     run_directory = config['path_to_load']
     num_classes = len(config['label_map'])
-    model_params, _, _ = load_hparams_from_event_file(run_directory)
-    #
-    # Stop if hyperparameters could not be loaded
-    #
-    try:
-        if model_params is None:
-            raise ValueError("\n\nFailed to load hyperparameters from the event file.\nExiting...\n")
-    except Exception as e:
-        print(e)
-        return
+    # model_params, _, _ = load_hparams_from_event_file(run_directory)
+    # #
+    # # Stop if hyperparameters could not be loaded
+    # #
+    # try:
+    #     if model_params is None:
+    #         raise ValueError("\n\nFailed to load hyperparameters from the event file.\nExiting...\n")
+    # except Exception as e:
+    #     print(e)
+    #     return
     strategy = tf.distribute.get_strategy()
     with strategy.scope():
         #
@@ -583,5 +583,5 @@ def main(path_to_config=None, mode=None):
 if __name__ == '__main__':
     # Change config file path based on modes
     path_to_config = "/kaggle/working/astra/config/supervised_task.yaml"
-    mode = "training"  # Change to "training" for supervised training
+    mode = "training"  # Change to "training" for supervised training or "inference" for generating embeddings
     main(path_to_config, mode)

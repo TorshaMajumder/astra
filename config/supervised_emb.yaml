@@ -7,6 +7,20 @@ path_to_data: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation
 path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/finetuned/test"
 path_to_class_count: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation_data_astra-distil_6K/train/data_stats.csv"
 #
+# --- Model Parameters ---
+#
+num_layers: 4          # Number of encoder layers
+mjd: True              # Use MJD for positional encoding
+base: 10000.0          # Base for positional encoding
+d_model: 256           # Embedding dimension
+num_heads: 4           # Number of attention heads
+dff: 1024              # Feed-forward network dimension
+rate: 0.1              # Dropout rate
+use_band_info: True    # Use segment embeddings
+time_scaling: 904.78   # Scaling factor for time indices in scaled positional encoding (288 * np.pi)
+use_drop: True        # Use dropout
+projection_dim: 2048    # Projection head dimension 
+#
 # --- Inference parameters ---
 #
 finetune: True      # Flag to load best finetuned weights for generating embeddings
