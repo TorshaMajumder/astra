@@ -119,7 +119,7 @@ def supervised_baseline_embeddings(config):
             path_to_weight = os.path.join(run_directory, f"best_supervised_{model_type}_weights.h5") 
             print(f"\nSearching for finetuned weights in: {path_to_weight}...")
             
-            full_model.load_weights(path_to_weight).expect_partial()
+            full_model.load_weights(path_to_weight)
             extractor.trainable = False 
             print(f"\nWeights loaded successfully into the model!")
             
