@@ -1,9 +1,13 @@
 import os
+import h5py
 import yaml
 import psutil
 import datetime
+import numpy as np
+from tqdm import tqdm
 import tensorflow as tf
-from astra.src.finetuning import finetune_data_loader
+from astra.src.preprocessing import create_inference_loader
+from astra.src.finetuning import finetune_data_loader, finetune_model
 
 def build_cnn_baseline(seq_len=600, num_classes=12, band_emb_dim=16):
     """
@@ -81,6 +85,125 @@ def build_bilstm_baseline(seq_len=600, num_classes=12, band_emb_dim=16):
     extractor_model = tf.keras.Model(inputs=input_dict, outputs=embedding, name="BiLSTM_Extractor")
 
     return full_model, extractor_model
+
+
+def supervised_baseline_embeddings(config):
+    
+    run_directory = config['path_to_load']
+    num_classes = len(config['label_map'])
+    
+    # Calculate seq_len
+    build_seq_len = sum(config['global_view_maxlens'].values()) if isinstance(config['global_view_maxlens'], dict) else config['global_view_maxlens']
+    
+    model_type = config.get('model_type', 'cnn') # Defaults to cnn if not specified
+    
+    strategy = tf.distribute.get_strategy()
+    with strategy.scope():
+        # ===================================================================================================== 
+        # 1. Instantiate the Model
+        # =====================================================================================================
+        print(f"\nBuilding {model_type.upper()} baseline architecture...")
+        if model_type == 'cnn':
+            full_model, extractor = build_cnn_baseline(seq_len=build_seq_len, num_classes=num_classes)
+        elif model_type == 'bilstm':
+            full_model, extractor = build_bilstm_baseline(seq_len=build_seq_len, num_classes=num_classes)
+        else:
+            raise ValueError("Invalid model_type in config. Must be 'cnn' or 'bilstm'.")
+
+        # ===================================================================================================== 
+        # 2. Load the Weights
+        # =====================================================================================================
+        try:
+            # We load weights into the full_model (since that's what was trained and saved)
+            # Because 'extractor' shares the exact same layers in memory, it automatically updates too!
+            path_to_weight = os.path.join(run_directory, f"best_supervised_{model_type}_weights.h5") 
+            print(f"\nSearching for finetuned weights in: {path_to_weight}...")
+            
+            full_model.load_weights(path_to_weight).expect_partial()
+            extractor.trainable = False 
+            print(f"\nWeights loaded successfully into the model!")
+            
+        except Exception as e:
+            print(f"\nERROR: Could not load weights. Ensure path exists.\n{e}")
+            return
+        
+        print(f"\n -- Final {model_type.upper()} Embedding Extractor ready!\n")
+        extractor.summary()
+        
+    # =====================================================================================================   
+    # 3. Setup Inference Loader
+    # =====================================================================================================   
+    print("\nSetting up the inference data loader...")
+    inference_loader = create_inference_loader(
+                                                source=config['path_to_data'],
+                                                batch_size=config['batch_size'],
+                                                maxlen=config['global_view_maxlens']
+                                            )
+
+    # ===================================================================================================== 
+    # 4. Generate & Save Embeddings
+    # =====================================================================================================
+    print(f"\nGenerating embeddings for the dataset using {model_type.upper()}...\n")
+    
+    # Get the exact output dimension dynamically (e.g., 512 for CNN, 512 for BiLSTM)
+    embedding_dim = extractor.output.shape[-1]  
+    
+    os.makedirs(config['path_to_save'], exist_ok=True)
+    h5_path = os.path.join(config['path_to_save'], f'{model_type}_embeddings.h5')
+    print(f"\nStreaming embeddings directly to HDF5 file: {h5_path} .")
+    
+    try:
+        with h5py.File(h5_path, 'w') as hf:
+            
+            string_dtype = h5py.string_dtype(encoding='utf-8')
+            dset_ids = hf.create_dataset('ids', (0,), maxshape=(None,), dtype='int64')
+            dset_labels = hf.create_dataset('labels', (0,), maxshape=(None,), dtype=string_dtype)
+            dset_embeddings = hf.create_dataset('embeddings', (0, embedding_dim), maxshape=(None, embedding_dim), dtype='float32')
+            
+            num_rows_written = 0
+            
+            for batch in tqdm(inference_loader, desc=f"Generating {model_type.upper()} Embeddings"):
+                
+                curr_batch_size = batch['input'].shape[0] 
+                
+                # ---------------------------------------------------------------------------------
+                # CRITICAL FIX: The inference_loader returns 3 views: (batch, 3, seq_len, ...)
+                # But CNN/BiLSTM only take 1 view! We use [:, 0, ...] to slice out just the FIRST view.
+                # ---------------------------------------------------------------------------------
+                model_inputs = {
+                    'input': batch['input'][:, 0, ...],
+                    'times': batch['times'][:, 0, ...],
+                    'band_info': batch['band_info'][:, 0, ...],
+                    'mask': batch['mask'][:, 0, ...]
+                }
+                
+                # Failsafe: Remove trailing 1s from mask and band_info to prevent broadcasting crashes
+                if len(model_inputs['mask'].shape) == 3:
+                    model_inputs['mask'] = tf.squeeze(model_inputs['mask'], axis=-1)
+                if len(model_inputs['band_info'].shape) == 3:
+                    model_inputs['band_info'] = tf.squeeze(model_inputs['band_info'], axis=-1)
+                
+                # Generate embeddings
+                final_embeddings_batch = extractor(model_inputs, training=False)
+                
+                # Resize datasets on disk
+                dset_embeddings.resize((num_rows_written + curr_batch_size, embedding_dim))
+                dset_labels.resize((num_rows_written + curr_batch_size,))
+                dset_ids.resize((num_rows_written + curr_batch_size,))
+                
+                # Write to disk
+                dset_embeddings[num_rows_written:] = final_embeddings_batch.numpy()
+                dset_labels[num_rows_written:] = batch['label'].numpy().astype(np.bytes_)
+                dset_ids[num_rows_written:] = batch['id'].numpy()
+                
+                num_rows_written += curr_batch_size
+                
+        print(f"\n-- Generation Complete !")
+        print(f"\nSuccessfully wrote {num_rows_written} embeddings to {h5_path} .")
+        
+    except Exception as e:
+        print(f"\nERROR: Could not save the files. Check: {e}\n")
+    
 
 
 def supervise_backbone(config):
@@ -222,15 +345,23 @@ def main(path_to_config=None, mode=None):
             raise ValueError(f"\nError parsing YAML file: {e}")
             
     if mode == "training":
-        # Make sure to set model_type in your YAML config or hardcode it here
+        
         if 'model_type' not in config:
-            config['model_type'] = 'cnn' # change to 'bilstm' to run the other
+            config['model_type'] = 'cnn' # change to 'bilstm' or 'cnn' to run 
             
         supervise_backbone(config)
+
+    elif mode == "inference":
+
+        if 'model_type' not in config:
+                config['model_type'] = 'cnn' # change to 'bilstm' or 'cnn' to run 
+
+        supervised_baseline_embeddings(config)
+
     else:
-        raise ValueError(f"\nInvalid mode '{mode}'. Choose 'training'.")
+        raise ValueError(f"\nInvalid mode '{mode}'. Choose 'training' or 'inference'.")
 
 if __name__ == '__main__':
     path_to_config = "/Users/torshamajumder/git/astra/config/supervised_task.yaml"
-    mode = "training" 
+    mode = "training" # Change to "inference" to generate embeddings
     main(path_to_config, mode)

@@ -4,7 +4,7 @@
 #
 path_to_load: "/home/nvidia/workplace/k_distil_res_second_run/run_20260318_154848/finetune_20260329_170424/"
 path_to_data: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation_data_astra-distil_6K/train/"
-path_to_save: "/home/nvidia/workplace/astra_storage/emb/k_distil_res/run_20260318_154848/teacher/all_dataset/finetuned/test"
+path_to_save: "/kaggle/working/supervised_bilstm_20260910_124124/train-emb/"
 path_to_class_count: "/kaggle/input/datasets/torshamajumder/abla-6k-proxy-data/ablation_data_astra-distil_6K/train/data_stats.csv"
 #
 # --- Model Parameters ---
@@ -23,6 +23,7 @@ projection_dim: 2048    # Projection head dimension
 #
 # --- Inference parameters ---
 #
+model_type: "cnn"          # Choose between 'cnn' or 'bilstm' for the supervised model architecture
 finetune: True      # Flag to load best finetuned weights for generating embeddings
 batch_size: 10       # per-GPU Batch size (adjust based on GPU memory)/ Just a batch size for CPU training
 num_gpus: 1          # # of GPU instances to use for training. Set to 0 for CPU training. (Default set to 0.)
@@ -84,3 +85,5 @@ label_map: {
                     'id': 11
                 }
             }
+
+
